@@ -1,0 +1,34 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# In Render: New -> Blueprint -> pick this repository. Everything below is
+# applied automatically; the four `sync: false` values are prompted for.
+
+services:
+  - type: web
+    name: seguequiz
+    runtime: node
+    plan: free
+    # There is nothing to build: the app has no dependencies and no build step.
+    buildCommand: npm install
+    startCommand: node src/server.js
+    healthCheckPath: /healthz
+
+    envVars:
+      # Signs session cookies. Render generates it once and keeps it across
+      # deploys, which is what stops every maker being signed out on restart.
+      - key: SEGUEQUIZ_SESSION_SECRET
+        generateValue: true
+
+      # The code needed to register a quiz maker. Choose something memorable.
+      - key: SEGUEQUIZ_SIGNUP_CODE
+        sync: false
+
+      # Without these two the container's disk is the database, and a free
+      # instance wipes it on every restart. Supabase dashboard -> Settings -> API.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      - key: NODE_ENV
+        value: production

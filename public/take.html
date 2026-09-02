@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Take quiz · SegueQuiz</title>
+    <link rel="stylesheet" href="/css/app.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23042b56'/><path d='M5 8h18l-3.2 4.4H5z' fill='%23878787'/><path d='M23.6 6.6h4.6L12.9 27h-4.6z' fill='%23ffffff'/></svg>"
+    />
+    <style>
+      .page--narrow {
+        max-width: 660px;
+      }
+
+      .timer-bar {
+        position: sticky;
+        top: 64px;
+        z-index: 5;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 12px 16px;
+        box-shadow: var(--shadow);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .timer {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        font-size: 1.35rem;
+        letter-spacing: -0.02em;
+      }
+
+      .timer--warning {
+        color: var(--warning);
+      }
+
+      .timer--critical {
+        color: var(--danger);
+        animation: pulse 1s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        50% { opacity: 0.55; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .timer--critical { animation: none; }
+      }
+
+      .progress {
+        flex: 1;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--bg-subtle);
+        overflow: hidden;
+      }
+
+      .progress__fill {
+        height: 100%;
+        background: var(--accent);
+        border-radius: 999px;
+        transition: width 0.3s ease;
+      }
+
+      .question-prompt {
+        font-size: 1.2rem;
+        font-weight: 650;
+        line-height: 1.4;
+      }
+
+      .option {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        text-align: left;
+        font: inherit;
+        padding: 14px 16px;
+        border-radius: var(--radius-sm);
+        border: 1.5px solid var(--border-strong);
+        background: var(--bg-elevated);
+        color: var(--text);
+        cursor: pointer;
+        transition: border-color 0.12s ease, background 0.12s ease;
+      }
+
+      .option:hover {
+        border-color: var(--accent);
+      }
+
+      .option--selected {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .option__key {
+        flex: none;
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        display: grid;
+        place-items: center;
+        font-size: 0.8rem;
+        font-weight: 700;
+        background: var(--bg-subtle);
+        color: var(--text-muted);
+      }
+
+      .option--selected .option__key {
+        background: var(--accent);
+        color: var(--on-accent);
+      }
+
+      .navigator {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+
+      .navigator button {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border: 1px solid var(--border-strong);
+        background: var(--bg-elevated);
+        color: var(--text-muted);
+        font: inherit;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .navigator button[data-answered="true"] {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .navigator button[data-current="true"] {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+
+      .score-hero {
+        text-align: center;
+        display: grid;
+        gap: 6px;
+        padding: 14px 0;
+      }
+
+      .leave-reminder {
+        margin: -8px 0 14px;
+        text-align: center;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--warning);
+      }
+
+      .score-hero__value {
+        font-size: 3rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        line-height: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <span class="brand">
+          <img class="brand__logo brand__logo--light" src="/img/segueit-logo.png" alt="SegueIT" />
+          <img class="brand__logo brand__logo--dark" src="/img/segueit-logo-dark.png" alt="" aria-hidden="true" />
+          <span class="brand__divider" aria-hidden="true"></span>
+          <span class="brand__product">Quiz</span>
+        </span>
+      </div>
+    </header>
+
+    <main class="page page--narrow">
+      <p class="notice notice--error" id="page-error" hidden></p>
+
+      <!-- Step 1: start -->
+      <section class="card stack" id="intro-view" hidden>
+        <div class="stack stack--tight">
+          <div class="row" id="intro-badges"></div>
+          <h1 id="intro-title"></h1>
+          <p class="meta" id="intro-description"></p>
+        </div>
+
+        <form class="stack" id="start-form">
+          <div class="field">
+            <label for="participant-name">Your name</label>
+            <input id="participant-name" type="text" maxlength="60" required autocomplete="name"
+                   placeholder="e.g. Satwik" />
+            <span class="field__hint">This is the name that appears on the leaderboard.</span>
+          </div>
+          <p class="notice notice--error" id="start-error" hidden></p>
+
+          <p class="notice notice--warning" id="leave-warning" hidden>
+            <strong>Stay on this screen.</strong> If you switch to another tab or app, or lock
+            your phone, your attempt ends immediately and is scored as it stands.
+          </p>
+
+          <button class="button button--large button--block" type="submit" id="start-button">
+            Start quiz
+          </button>
+          <p class="meta" style="text-align: center">
+            The timer starts as soon as you press start.
+          </p>
+        </form>
+      </section>
+
+      <!-- Step 2: answer -->
+      <section id="quiz-view" hidden>
+        <div class="timer-bar">
+          <span class="timer" id="timer">--:--</span>
+          <div class="progress"><div class="progress__fill" id="progress-fill"></div></div>
+          <span class="meta numeric" id="progress-label"></span>
+        </div>
+
+        <p class="leave-reminder" id="leave-reminder" hidden>
+          Leaving this screen ends your attempt.
+        </p>
+
+        <div class="card stack">
+          <span class="badge badge--accent" id="question-position"></span>
+          <p class="question-prompt" id="question-prompt"></p>
+          <div class="stack stack--tight" id="option-list"></div>
+
+          <div class="row">
+            <button class="button button--ghost" type="button" id="previous-button">Back</button>
+            <button class="button" type="button" id="next-button">Next</button>
+            <span class="spacer"></span>
+            <button class="button" type="button" id="submit-button">Submit quiz</button>
+          </div>
+        </div>
+
+        <div class="card stack stack--tight" style="margin-top: 18px">
+          <span class="label">Jump to a question</span>
+          <div class="navigator" id="navigator"></div>
+        </div>
+      </section>
+
+      <!-- Step 3: result -->
+      <section class="card stack" id="result-view" hidden>
+        <div class="score-hero">
+          <span class="meta" id="result-name"></span>
+          <span class="score-hero__value" id="result-score"></span>
+          <span class="meta" id="result-detail"></span>
+        </div>
+        <p class="notice notice--info" id="result-note" hidden></p>
+        <div class="stat-grid">
+          <div class="stat">
+            <div class="stat__value" id="result-correct"></div>
+            <div class="stat__label">Correct</div>
+          </div>
+          <div class="stat">
+            <div class="stat__value" id="result-time"></div>
+            <div class="stat__label">Time taken</div>
+          </div>
+          <div class="stat">
+            <div class="stat__value" id="result-percent"></div>
+            <div class="stat__label">Score</div>
+          </div>
+        </div>
+        <p class="meta" style="text-align: center">
+          Your answers are in. Results are with the quiz host.
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="/js/take.js"></script>
+  </body>
+</html>

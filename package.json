@@ -1,0 +1,17 @@
+{
+  "name": "seguequiz",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Create quizzes, share them with a QR code, run them against a timer, and rank the results.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard · SegueQuiz</title>
+    <link rel="stylesheet" href="/css/app.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23042b56'/><path d='M5 8h18l-3.2 4.4H5z' fill='%23878787'/><path d='M23.6 6.6h4.6L12.9 27h-4.6z' fill='%23ffffff'/></svg>"
+    />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="brand" href="/" aria-label="SegueQuiz home">
+          <img class="brand__logo brand__logo--light" src="/img/segueit-logo.png" alt="SegueIT" />
+          <img class="brand__logo brand__logo--dark" src="/img/segueit-logo-dark.png" alt="" aria-hidden="true" />
+          <span class="brand__divider" aria-hidden="true"></span>
+          <span class="brand__product">Quiz</span>
+        </a>
+        <span class="spacer"></span>
+        <span class="meta" id="account-name"></span>
+        <button class="button button--ghost" id="sign-out" type="button">Sign out</button>
+        <button class="button" id="new-quiz-button" type="button">New quiz</button>
+      </div>
+    </header>
+
+    <main class="page">
+      <div class="page-heading">
+        <div>
+          <h1>Your quizzes</h1>
+          <p>Create a quiz, share the QR code, and watch the leaderboard fill up.</p>
+        </div>
+      </div>
+
+      <p class="notice notice--error" id="page-error" hidden></p>
+      <div class="grid grid--cards" id="quiz-list"></div>
+    </main>
+
+    <dialog id="new-quiz-dialog" aria-labelledby="new-quiz-title">
+      <form method="dialog" id="new-quiz-form">
+        <div class="dialog__body stack">
+          <h2 id="new-quiz-title">Create a quiz</h2>
+
+          <div class="field">
+            <label for="quiz-title">Title</label>
+            <input id="quiz-title" name="title" type="text" maxlength="120" required
+                   placeholder="Friday physics warm-up" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <label for="quiz-description">Description <span class="field__hint">(optional)</span></label>
+            <textarea id="quiz-description" name="description" maxlength="500"
+                      placeholder="Shown to participants before they start."></textarea>
+          </div>
+
+          <div class="field">
+            <span class="label">Time limit</span>
+            <div class="duration-input">
+              <input id="quiz-minutes" type="number" min="0" max="240" value="5" aria-label="Minutes" />
+              <span>min</span>
+              <input id="quiz-seconds" type="number" min="0" max="59" value="0" aria-label="Seconds" />
+              <span>sec</span>
+            </div>
+            <span class="field__hint">The countdown starts when a participant begins the quiz.</span>
+          </div>
+
+          <p class="notice notice--error" id="dialog-error" hidden></p>
+        </div>
+
+        <div class="dialog__footer">
+          <button class="button button--ghost" type="button" id="cancel-new-quiz">Cancel</button>
+          <button class="button" type="submit" id="submit-new-quiz">Create quiz</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/js/dashboard.js"></script>
+  </body>
+</html>

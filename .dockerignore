@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+node_modules
+data
+test
+scripts
+supabase
+*.md
+.env
+.env.*
+Dockerfile
+.dockerignore
+render.yaml

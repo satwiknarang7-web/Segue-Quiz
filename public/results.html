@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Results · SegueQuiz</title>
+    <link rel="stylesheet" href="/css/app.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23042b56'/><path d='M5 8h18l-3.2 4.4H5z' fill='%23878787'/><path d='M23.6 6.6h4.6L12.9 27h-4.6z' fill='%23ffffff'/></svg>"
+    />
+    <style>
+      .breakdown {
+        display: grid;
+        gap: 14px;
+      }
+
+      .breakdown__item {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 13px 15px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .breakdown__head {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+      }
+
+      .breakdown__text {
+        font-weight: 600;
+        flex: 1;
+      }
+
+      .option-bar {
+        display: grid;
+        grid-template-columns: 22px 1fr 46px;
+        gap: 9px;
+        align-items: center;
+        font-size: 0.87rem;
+      }
+
+      .option-bar__track {
+        height: 8px;
+        border-radius: 999px;
+        background: var(--bg-subtle);
+        overflow: hidden;
+      }
+
+      .option-bar__fill {
+        height: 100%;
+        background: var(--border-strong);
+        border-radius: 999px;
+      }
+
+      .option-bar--correct .option-bar__fill {
+        background: var(--success);
+      }
+
+      .option-bar__label {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        display: grid;
+        place-items: center;
+        font-size: 0.72rem;
+        font-weight: 700;
+        background: var(--bg-subtle);
+        color: var(--text-muted);
+      }
+
+      .option-bar--correct .option-bar__label {
+        background: var(--success-soft);
+        color: var(--success);
+      }
+
+      .winner-name {
+        font-weight: 650;
+      }
+
+      .tie-note {
+        font-size: 0.78rem;
+        color: var(--text-faint);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="brand" href="/" aria-label="SegueQuiz home">
+          <img class="brand__logo brand__logo--light" src="/img/segueit-logo.png" alt="SegueIT" />
+          <img class="brand__logo brand__logo--dark" src="/img/segueit-logo-dark.png" alt="" aria-hidden="true" />
+          <span class="brand__divider" aria-hidden="true"></span>
+          <span class="brand__product">Quiz</span>
+        </a>
+        <span class="spacer"></span>
+        <a class="button button--ghost" id="edit-link" href="#">Edit quiz</a>
+        <a class="button button--ghost" id="csv-link" href="#">Export CSV</a>
+      </div>
+    </header>
+
+    <main class="page">
+      <div class="page-heading">
+        <div>
+          <h1 id="quiz-title">Loading…</h1>
+          <p id="quiz-meta"></p>
+        </div>
+        <span class="spacer"></span>
+        <label class="switch">
+          <input type="checkbox" id="auto-refresh" checked />
+          <span>Auto refresh</span>
+        </label>
+      </div>
+
+      <p class="notice notice--error" id="page-error" hidden></p>
+
+      <div class="stat-grid" id="stats" style="margin-bottom: 22px"></div>
+
+      <section class="card card--flush" style="margin-bottom: 22px">
+        <div style="padding: 18px 20px 4px">
+          <h2 style="font-size: 1.05rem">Leaderboard</h2>
+          <p class="tie-note">
+            Ranked by score. When scores tie, the faster time wins.
+            Only you can see this page.
+          </p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 62px">Rank</th>
+                <th>Participant</th>
+                <th class="numeric">Score</th>
+                <th class="numeric">Correct</th>
+                <th class="numeric">Time</th>
+                <th>Submitted</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-body"></tbody>
+          </table>
+        </div>
+        <div id="leaderboard-empty"></div>
+      </section>
+
+      <section class="card stack" id="breakdown-section">
+        <div class="card__header"><h2>Question breakdown</h2></div>
+        <div class="breakdown" id="breakdown"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/js/results.js"></script>
+  </body>
+</html>

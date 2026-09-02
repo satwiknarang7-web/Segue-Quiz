@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SegueQuiz — run a live quiz in minutes</title>
+    <meta
+      name="description"
+      content="Build a quiz, share a QR code, and watch a live leaderboard. Scores rank by points, ties break on speed."
+    />
+    <link rel="stylesheet" href="/css/app.css" />
+    <link rel="stylesheet" href="/css/landing.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23042b56'/><path d='M5 8h18l-3.2 4.4H5z' fill='%23878787'/><path d='M23.6 6.6h4.6L12.9 27h-4.6z' fill='%23ffffff'/></svg>"
+    />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="brand" href="/" aria-label="SegueQuiz home">
+          <img class="brand__logo brand__logo--light" src="/img/segueit-logo.png" alt="SegueIT" />
+          <img class="brand__logo brand__logo--dark" src="/img/segueit-logo-dark.png" alt="" aria-hidden="true" />
+          <span class="brand__divider" aria-hidden="true"></span>
+          <span class="brand__product">Quiz</span>
+        </a>
+        <span class="spacer"></span>
+        <a class="button button--ghost" href="/signin">Sign in</a>
+        <a class="button" href="/signup">Create account</a>
+      </div>
+    </header>
+
+    <main>
+      <!-- Hero ------------------------------------------------------------ -->
+      <section class="hero">
+        <div class="hero__inner">
+          <div class="hero__copy">
+            <span class="eyebrow">Live quizzing for teams and classrooms</span>
+            <h1>Run a live quiz in the time it takes to explain the rules.</h1>
+            <p class="lede">
+              Write your questions, put a QR code on the screen, and watch the leaderboard fill up
+              as people answer. Highest score wins — and when scores tie, the fastest finisher takes it.
+            </p>
+
+            <div class="hero__actions">
+              <a class="button button--large" href="/signup">Create a maker account</a>
+              <a class="button button--ghost button--large" href="/signin">Sign in</a>
+            </div>
+
+            <p class="hero__note">
+              Quiz takers never sign in. They scan and start.
+            </p>
+          </div>
+
+          <!-- Join box: for someone holding a code but no QR ---------------- -->
+          <aside class="join-card" aria-labelledby="join-heading">
+            <h2 id="join-heading">Taking a quiz?</h2>
+            <p class="meta">Enter the six-character code from your host.</p>
+            <form id="join-form" class="stack">
+              <label class="sr-only" for="join-code">Join code</label>
+              <input
+                id="join-code"
+                class="join-card__input"
+                type="text"
+                maxlength="6"
+                placeholder="ABC123"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                required
+              />
+              <button class="button button--block" type="submit">Go to quiz</button>
+              <p class="notice notice--error" id="join-error" hidden></p>
+            </form>
+          </aside>
+        </div>
+      </section>
+
+      <!-- How it works ---------------------------------------------------- -->
+      <section class="section" id="how">
+        <div class="section__inner">
+          <h2 class="section__title">Three steps, start to leaderboard</h2>
+          <ol class="steps">
+            <li class="step">
+              <span class="step__number">1</span>
+              <h3>Write the questions</h3>
+              <p>
+                Multiple choice, two to six options, your own points per question. Set the time
+                limit once and it governs every attempt.
+              </p>
+            </li>
+            <li class="step">
+              <span class="step__number">2</span>
+              <h3>Share the QR code</h3>
+              <p>
+                Every quiz gets a printable QR code and a short join code. Put either on a slide,
+                a handout, or the wall.
+              </p>
+            </li>
+            <li class="step">
+              <span class="step__number">3</span>
+              <h3>Watch the results</h3>
+              <p>
+                The leaderboard updates itself while people play. Export it as CSV, or read the
+                per-question breakdown to see what tripped everyone up.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Features -------------------------------------------------------- -->
+      <section class="section section--muted" id="features">
+        <div class="section__inner">
+          <h2 class="section__title">Built for the awkward parts</h2>
+          <div class="features">
+            <article class="feature">
+              <h3>Ties break on time</h3>
+              <p>
+                Two people on full marks is a draw everywhere else. Here the faster attempt wins,
+                so your leaderboard always has a top.
+              </p>
+            </article>
+            <article class="feature">
+              <h3>A timer that cannot be gamed</h3>
+              <p>
+                The countdown runs on the server. Refreshing resumes the same attempt with the same
+                deadline; it never hands out a fresh clock.
+              </p>
+            </article>
+            <article class="feature">
+              <h3>Nothing lost to a closed tab</h3>
+              <p>
+                Answers save as they are picked. If the time runs out, the attempt is submitted
+                automatically with whatever was answered.
+              </p>
+            </article>
+            <article class="feature">
+              <h3>Answers stay on the server</h3>
+              <p>
+                Participants are sent the questions, never the answer key. Scoring happens
+                server-side, and the leaderboard never leaks which option was right.
+              </p>
+            </article>
+            <article class="feature">
+              <h3>Two-factor for makers</h3>
+              <p>
+                Maker accounts use a password plus an authenticator app, with single-use recovery
+                codes. Takers need no account at all.
+              </p>
+            </article>
+            <article class="feature">
+              <h3>Runs on your own machine</h3>
+              <p>
+                No database to install, no accounts with anyone else, no data leaving your network.
+                Start it, share the address, done.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Closing CTA ----------------------------------------------------- -->
+      <section class="section">
+        <div class="section__inner cta">
+          <h2>Your first quiz is about five minutes away.</h2>
+          <p class="lede">
+            Create a maker account, add a handful of questions, and put the QR code on screen.
+          </p>
+          <a class="button button--large" href="/signup">Create a maker account</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer__inner">
+        <span class="meta">SegueQuiz — a SegueIT tool.</span>
+        <span class="spacer"></span>
+        <a class="meta" href="/signin">Maker sign in</a>
+      </div>
+    </footer>
+
+    <script type="module" src="/js/landing.js"></script>
+  </body>
+</html>

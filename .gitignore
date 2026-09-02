@@ -1,0 +1,8 @@
+node_modules/
+data/*.json
+*.log
+.DS_Store
+
+# Local environment files
+.env
+.env.local
