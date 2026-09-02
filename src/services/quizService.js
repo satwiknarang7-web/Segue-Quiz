@@ -148,6 +148,21 @@ export const quizService = {
     });
   },
 
+  /**
+   * Create a quiz and all of its questions in one go, for importing a
+   * ready-made set. Every question goes through the same validation as one
+   * typed into the editor.
+   */
+  createWithQuestions({ quiz: settings, questions }, ownerId) {
+    const quiz = quizService.create(settings, ownerId);
+    let latest = quiz;
+
+    for (const question of questions) {
+      latest = quizService.addQuestion(quiz.id, question, ownerId);
+    }
+    return latest;
+  },
+
   update(quizId, payload, ownerId) {
     const quiz = requireOwnedQuiz(quizId, ownerId);
     const settings = parseQuizSettings(payload, { partial: true });

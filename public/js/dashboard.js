@@ -142,6 +142,27 @@ async function setPublished(quiz, isPublished) {
   }
 }
 
+async function importAiQuiz() {
+  const button = document.querySelector('#import-ai-quiz');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Adding…';
+  }
+
+  try {
+    const { quiz } = await api.importAiQuiz();
+    toast('SegueIT AI Quiz added');
+    // Straight into the editor so the answer key can be checked before opening it.
+    window.location.href = `/quizzes/${quiz.id}`;
+  } catch (error) {
+    showError(pageError, error.message);
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Add the SegueIT AI Quiz';
+    }
+  }
+}
+
 async function deleteQuiz(quiz) {
   const confirmed = window.confirm(
     `Delete "${quiz.title}"? Its ${quiz.attemptCount} recorded attempt(s) will be removed too.`,
@@ -168,6 +189,20 @@ async function render() {
         el('div', { class: 'card empty-state', style: 'grid-column: 1 / -1' }, [
           el('h3', { text: 'No quizzes yet' }),
           el('p', { text: 'Create your first quiz to get a join code and a QR code.' }),
+          el('div', { class: 'row', style: 'justify-content: center; margin-top: 18px' }, [
+            el('button', {
+              class: 'button',
+              type: 'button',
+              id: 'import-ai-quiz',
+              text: 'Add the SegueIT AI Quiz',
+              onClick: importAiQuiz,
+            }),
+          ]),
+          el('p', {
+            class: 'meta',
+            style: 'margin-top: 10px',
+            text: '15 questions on agentic AI, RAG and automation, ready to run.',
+          }),
         ]),
       );
       return;

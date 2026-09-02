@@ -197,6 +197,7 @@ src/
     supabaseStore.js     Same surface, backed by a Supabase table
     postgrest.js         Minimal PostgREST client over fetch
   repositories/          Data access for quizzes, attempts and users
+  data/aiQuiz.js         The bundled SegueIT AI Quiz, shared by import paths
   services/              Domain rules: accounts, authoring, attempts, leaderboard
   routes/                Route definitions grouped by area
 public/                  Landing, auth, reset, dashboard, editor, take, results
@@ -257,6 +258,7 @@ Everything else is public.
 | `POST` | `/api/auth/signout` | Sign out | |
 | `GET` | `/api/quizzes` | List quizzes with counts | maker |
 | `POST` | `/api/quizzes` | Create a quiz | maker |
+| `POST` | `/api/quizzes/import/ai-quiz` | Import the bundled AI quiz | maker |
 | `GET` | `/api/quizzes/:id` | Full quiz, including the answer key | maker |
 | `PATCH` | `/api/quizzes/:id` | Update settings | maker |
 | `DELETE` | `/api/quizzes/:id` | Delete a quiz and its attempts | maker |
@@ -280,8 +282,14 @@ Participant-facing endpoints never include `correctIndex`; scoring happens on th
 
 ## Importing a quiz
 
-`scripts/import-ai-quiz.mjs` loads the **SegueIT AI Quiz** (15 questions on agentic AI,
-RAG, LLMs and automation) from its Google Form into a running server:
+The **SegueIT AI Quiz** — 15 questions on agentic AI, RAG, LLMs and automation — is
+bundled in `src/data/aiQuiz.js`.
+
+The easy way: sign in, and press **Add the SegueIT AI Quiz** on an empty dashboard. It
+is created as a draft under your account so you can check the answer key before opening
+it.
+
+The same thing from a terminal, for scripting:
 
 ```bash
 SEGUEQUIZ_URL=https://your-app.onrender.com SEGUEQUIZ_EMAIL=you@example.com SEGUEQUIZ_PASSWORD='your password' SEGUEQUIZ_TOTP=123456 node scripts/import-ai-quiz.mjs

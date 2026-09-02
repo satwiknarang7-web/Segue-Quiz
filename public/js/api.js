@@ -20,6 +20,7 @@ async function request(method, path, body) {
 export const api = {
   listQuizzes: () => request('GET', '/api/quizzes'),
   createQuiz: (payload) => request('POST', '/api/quizzes', payload),
+  importAiQuiz: () => request('POST', '/api/quizzes/import/ai-quiz'),
   getQuiz: (quizId) => request('GET', `/api/quizzes/${quizId}`),
   updateQuiz: (quizId, payload) => request('PATCH', `/api/quizzes/${quizId}`, payload),
   deleteQuiz: (quizId) => request('DELETE', `/api/quizzes/${quizId}`),

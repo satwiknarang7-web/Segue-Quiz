@@ -421,6 +421,37 @@ test('one maker cannot see or edit another maker\'s quizzes', async () => {
   );
 });
 
+test('the AI quiz imports in one call, owned by whoever asked', async () => {
+  const maker = await createMaker();
+
+  const anonymous = await call('POST', '/api/quizzes/import/ai-quiz');
+  assert.equal(anonymous.status, 401, 'importing needs a signed-in maker');
+
+  const imported = await call('POST', '/api/quizzes/import/ai-quiz', { cookie: maker.cookie });
+  assert.equal(imported.status, 200);
+  const { quiz, joinUrl } = await imported.json();
+
+  assert.equal(quiz.title, 'SegueIT AI Quiz');
+  assert.equal(quiz.questions.length, 15);
+  assert.equal(quiz.timeLimitSeconds, 900);
+  assert.equal(quiz.isPublished, false, 'imported as a draft, so the key can be checked first');
+  assert.match(joinUrl, /\/take\/[A-Z0-9]{6}$/);
+
+  // Every question survived validation with its answer key intact.
+  for (const question of quiz.questions) {
+    assert.ok(question.options.length >= 2);
+    assert.ok(question.correctIndex >= 0 && question.correctIndex < question.options.length);
+  }
+
+  // It lands on the importer's own dashboard and nobody else's.
+  const mine = await (await call('GET', '/api/quizzes', { cookie: maker.cookie })).json();
+  assert.ok(mine.quizzes.some((entry) => entry.id === quiz.id));
+
+  const other = await createMaker();
+  const theirs = await (await call('GET', '/api/quizzes', { cookie: other.cookie })).json();
+  assert.ok(!theirs.quizzes.some((entry) => entry.id === quiz.id));
+});
+
 test('signing out invalidates the session', async () => {
   const maker = await createMaker();
   assert.equal((await call('GET', '/api/quizzes', { cookie: maker.cookie })).status, 200);
