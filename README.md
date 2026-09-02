@@ -211,9 +211,12 @@ section.
 
 ### On Render
 
-1. Push this repository to GitHub.
-2. Render → **New** → **Blueprint** → pick the repository. `render.yaml` does the rest.
-3. Fill in the values it prompts for (below).
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/satwiknarang7-web/Segue-Quiz)
+
+That button reads `render.yaml` from the repository and pre-fills everything except the
+values marked `sync: false`, which it prompts for.
+
+By hand instead: Render → **New** → **Blueprint** → pick the repository.
 
 ### Anywhere that runs a container
 
