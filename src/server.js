@@ -16,7 +16,21 @@ try {
   console.error('');
   console.error('  Could not start with the configured storage.');
   console.error(`  ${error.message}`);
-  console.error('  Set both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or unset both to use JSON files.');
+
+  // Name the actual remedy rather than repeating the generic settings advice.
+  if (/PGRST205|Could not find the table/i.test(error.message)) {
+    console.error('');
+    console.error('  Supabase answered, so the URL and key are right - the tables are missing.');
+    console.error('  Run supabase/migrations/0001_initial_schema.sql in the SQL editor of your');
+    console.error('  Supabase project, then redeploy.');
+  } else if (/401|invalid|JWT|apikey/i.test(error.message)) {
+    console.error('');
+    console.error('  That looks like a rejected key. SUPABASE_SERVICE_ROLE_KEY must be the');
+    console.error('  service_role key, not the anon or publishable one.');
+  } else {
+    console.error('  Set both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or unset both to use JSON files.');
+  }
+
   console.error('');
   process.exit(1);
 }
