@@ -174,6 +174,19 @@ export const quizService = {
     return quizRepository.update(quiz.id, (current) => touch({ ...current, ...settings }));
   },
 
+  /**
+   * Wipe every attempt at a quiz, keeping the quiz itself.
+   *
+   * This is how the same quiz gets run with a second group: it clears the
+   * leaderboard and, with it, the record of who has already taken it, so the
+   * one-attempt rule starts from scratch.
+   */
+  clearResults(quizId, ownerId) {
+    const quiz = requireOwnedQuiz(quizId, ownerId);
+    const removed = attemptRepository.removeByQuiz(quiz.id);
+    return { quizId: quiz.id, removed };
+  },
+
   remove(quizId, ownerId) {
     const quiz = requireOwnedQuiz(quizId, ownerId);
     attemptRepository.removeByQuiz(quiz.id);

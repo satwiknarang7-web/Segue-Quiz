@@ -452,6 +452,66 @@ test('the AI quiz imports in one call, owned by whoever asked', async () => {
   assert.ok(!theirs.quizzes.some((entry) => entry.id === quiz.id));
 });
 
+test('the owner can clear a leaderboard, and only the owner', async () => {
+  const maker = await createMaker();
+  const quiz = await seedQuiz(maker.cookie);
+
+  const started = await (
+    await call('POST', `/api/quizzes/${quiz.id}/attempts`, { body: { participantName: 'Ada' } })
+  ).json();
+  await call('POST', `/api/attempts/${started.attempt.attemptId}/submit`, { body: {} });
+
+  const before = await (
+    await call('GET', `/api/quizzes/${quiz.id}/results`, { cookie: maker.cookie })
+  ).json();
+  assert.equal(before.entries.length, 1);
+
+  // Not for anonymous takers, nor for a different maker.
+  assert.equal((await call('DELETE', `/api/quizzes/${quiz.id}/results`)).status, 401);
+  const other = await createMaker();
+  assert.equal(
+    (await call('DELETE', `/api/quizzes/${quiz.id}/results`, { cookie: other.cookie })).status,
+    404,
+  );
+
+  const cleared = await call('DELETE', `/api/quizzes/${quiz.id}/results`, { cookie: maker.cookie });
+  assert.equal(cleared.status, 200);
+  assert.equal((await cleared.json()).removed, 1);
+
+  const after = await (
+    await call('GET', `/api/quizzes/${quiz.id}/results`, { cookie: maker.cookie })
+  ).json();
+  assert.equal(after.entries.length, 0);
+  assert.equal(after.stats.submittedCount, 0);
+
+  // The quiz itself survives, questions and all.
+  const still = await (await call('GET', `/api/quizzes/${quiz.id}`, { cookie: maker.cookie })).json();
+  assert.equal(still.quiz.questions.length, 1);
+  assert.equal(still.quiz.isPublished, true);
+});
+
+test('clearing a leaderboard lets the same person take the quiz again', async () => {
+  const maker = await createMaker();
+  const quiz = await seedQuiz(maker.cookie);
+
+  const first = await (
+    await call('POST', `/api/quizzes/${quiz.id}/attempts`, { body: { participantName: 'Ada' } })
+  ).json();
+  await call('POST', `/api/attempts/${first.attempt.attemptId}/submit`, { body: {} });
+
+  const blocked = await call('POST', `/api/quizzes/${quiz.id}/attempts`, {
+    body: { participantName: 'Ada' },
+  });
+  assert.equal(blocked.status, 409, 'one attempt each, until the board is cleared');
+
+  await call('DELETE', `/api/quizzes/${quiz.id}/results`, { cookie: maker.cookie });
+
+  const again = await call('POST', `/api/quizzes/${quiz.id}/attempts`, {
+    body: { participantName: 'Ada' },
+  });
+  assert.equal(again.status, 200, 'clearing resets who has already taken it');
+});
+
 test('signing out invalidates the session', async () => {
   const maker = await createMaker();
   assert.equal((await call('GET', '/api/quizzes', { cookie: maker.cookie })).status, 200);

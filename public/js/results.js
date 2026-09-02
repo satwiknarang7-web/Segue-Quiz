@@ -1,4 +1,13 @@
-import { api, clear, el, formatDateTime, formatDuration, formatTimeLimit, showError } from './api.js';
+import {
+  api,
+  clear,
+  el,
+  formatDateTime,
+  formatDuration,
+  formatTimeLimit,
+  showError,
+  toast,
+} from './api.js';
 
 const quizId = window.location.pathname.split('/').filter(Boolean)[1];
 const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -86,6 +95,48 @@ function renderLeaderboard(entries) {
   });
 }
 
+let latest = null;
+
+/**
+ * Clearing is how the same quiz gets run with a second group, so the
+ * confirmation has to be explicit: it also resets who has already taken it,
+ * which is what lets everyone start again.
+ */
+document.querySelector('#clear-results').addEventListener('click', async () => {
+  const submitted = latest?.stats?.submittedCount ?? 0;
+  const running = latest?.stats?.inProgressCount ?? 0;
+
+  if (submitted === 0 && running === 0) {
+    toast('The leaderboard is already empty');
+    return;
+  }
+
+  const lines = [
+    `Clear the leaderboard for "${latest?.quiz?.title ?? 'this quiz'}"?`,
+    '',
+    `This deletes ${submitted} submitted attempt(s) and cannot be undone.`,
+  ];
+  if (running > 0) {
+    lines.push(`${running} attempt(s) are still in progress and will be ended.`);
+  }
+  lines.push('', 'Everyone will be able to take the quiz again.');
+
+  if (!window.confirm(lines.join('\n'))) return;
+
+  const button = document.querySelector('#clear-results');
+  button.disabled = true;
+
+  try {
+    const { removed } = await api.clearResults(quizId);
+    toast(`Cleared ${removed} attempt(s)`);
+    await refresh();
+  } catch (error) {
+    showError(pageError, error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 function renderBreakdown(breakdown) {
   const container = clear(document.querySelector('#breakdown'));
 
@@ -135,6 +186,7 @@ function renderBreakdown(breakdown) {
 async function refresh() {
   try {
     const data = await api.getResults(quizId);
+    latest = data;
     pageError.hidden = true;
 
     renderStats(data);

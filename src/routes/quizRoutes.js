@@ -167,6 +167,13 @@ quizRoutes.get(
   maker,
 );
 
+/** Clear the leaderboard without deleting the quiz. */
+quizRoutes.delete(
+  '/api/quizzes/:quizId/results',
+  ({ params, user }) => quizService.clearResults(params.quizId, user.id),
+  maker,
+);
+
 quizRoutes.get('/api/quizzes/:quizId/results.csv', ({ params, res, user }) => {
   const quiz = quizService.requireOwnedQuiz(params.quizId, user.id);
   const csv = leaderboardService.toCsv(quiz.id);

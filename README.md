@@ -65,6 +65,16 @@ data, or pick up a second phone gets another go. It stops the casual retake, whi
 what it is for. A real guarantee needs takers to sign in, which is a much bigger change
 — ask if you want it.
 
+### Clearing the leaderboard
+
+**Clear** on the results page deletes every attempt at that quiz while keeping the quiz,
+its questions and its join code. It is owner-only, and irreversible - the confirmation
+names how many attempts will go, and warns when some are still in progress.
+
+Clearing also resets **who has already taken it**, which is the point: it is how the
+same quiz gets run with a second group without having to rebuild it or hand out a new
+QR code. Export the CSV first if the results matter.
+
 ### Leaving the quiz
 
 By default an attempt **ends the moment the taker leaves the screen** — switching browser
@@ -370,6 +380,7 @@ Everything else is public.
 | `GET` | `/api/quizzes/:id/qr.svg` | QR code as SVG (`?size=`) | maker |
 | `GET` | `/api/quizzes/:id/qr.png` | QR code as PNG (`?scale=`) | maker |
 | `GET` | `/api/quizzes/:id/results` | Leaderboard, stats and per-question breakdown | maker |
+| `DELETE` | `/api/quizzes/:id/results` | Clear every attempt, keeping the quiz | maker |
 | `GET` | `/api/quizzes/:id/results.csv` | Leaderboard as CSV | maker |
 | `GET` | `/api/quizzes/:id/intro` | Participant-facing summary |  |
 | `POST` | `/api/quizzes/:id/attempts` | Start (or resume) an attempt |  |
