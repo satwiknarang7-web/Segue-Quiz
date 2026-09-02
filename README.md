@@ -171,6 +171,88 @@ password.
 Lose both the phone and the recovery codes and nobody can help: delete that row from
 the `users` table and sign up again.
 
+## Deploying it
+
+The app is a long-running Node process, so it belongs on a container host —
+Render, Railway, Fly, or anything that runs a container. A `render.yaml` blueprint
+and a `Dockerfile` are both included.
+
+It is **not** suited to Vercel or other serverless platforms without change: rows are
+held in memory per process, so separate instances would disagree about who is
+mid-attempt, and the ephemeral disk would mint a new session key on every cold start.
+Making that work means an async data layer — see the note at the end of the Supabase
+section.
+
+### On Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/satwiknarang7-web/Segue-Quiz)
+
+That button reads `render.yaml` from the repository and pre-fills everything except the
+values marked `sync: false`, which it prompts for.
+
+By hand instead: Render → **New** → **Blueprint** → pick the repository.
+
+### Anywhere that runs a container
+
+```bash
+docker build -t seguequiz .
+```
+
+```bash
+docker run -p 4000:4000 --env-file .env seguequiz
+```
+
+Point the platform's health check at `/healthz`.
+
+### What to set, and why it matters
+
+| Variable | Why |
+| --- | --- |
+| `SEGUEQUIZ_SESSION_SECRET` | Signs session cookies. Without it a fresh key is generated on every restart, signing every maker out. `render.yaml` generates and keeps one for you. |
+| `SEGUEQUIZ_SIGNUP_CODE` | The code needed to register a maker. Otherwise it changes on every restart. |
+| `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | **Without these the container's disk is the database, and a redeploy wipes every quiz, account and result.** |
+
+The app tells you when it is running hosted without them:
+
+```
+! Storage is JSON files on a hosted container.
+    Every redeploy or restart wipes quizzes, accounts and results.
+    Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
+```
+
+You do not need to set `PUBLIC_BASE_URL`: Render, Railway and Fly each announce their
+own public address and the app picks it up, so QR codes encode the right URL. Set it
+by hand for a custom domain.
+
+Once the app knows it is served over HTTPS, session cookies are marked `Secure`.
+
+### Auto-deploy
+
+Render only watches a repository for pushes once **its GitHub app is connected to that
+repository**. A service created from a bare public URL clones fine but never learns
+about new commits, so `autoDeploy: yes` sits there with nothing to trigger it and every
+deploy has to be started by hand.
+
+Connect it once: Render dashboard -> the service -> **Settings** -> **Build & Deploy** ->
+connect the repository. That also turns on pull request previews.
+
+`.github/workflows/ci.yml` covers the same ground from the other side. It runs the test
+suite on every push and pull request, and on a green `main` it calls a Render deploy
+hook - so a push that breaks the tests never reaches the site. The deploy step is
+skipped unless a `RENDER_DEPLOY_HOOK_URL` secret exists, so the workflow is useful as
+plain CI even if you connect Render directly instead.
+
+To use that path: Render -> Settings -> **Deploy Hook**, copy the URL, then add it as a
+repository secret named `RENDER_DEPLOY_HOOK_URL` under GitHub -> Settings -> Secrets and
+variables -> Actions.
+
+### Free tiers
+
+Render's free web services spin down after a spell of inactivity, and the next request
+can take up to a minute while the instance wakes. The first person to scan a QR code
+after a quiet period waits; everyone after them does not. Open the URL yourself a
+couple of minutes before an event starts, and it will be warm.
+
 ## Configuration
 
 All optional, set as environment variables:

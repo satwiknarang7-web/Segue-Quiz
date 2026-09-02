@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # There are no dependencies to install, so there is nothing to cache
+      # and no lockfile to restore. The whole suite is Node's own test runner.
+      - name: Run tests
+        run: node --test
+
+  deploy:
+    name: Deploy to Render
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      # Render only opens a webhook of its own once its GitHub app is connected
+      # to the repository. Until then this hook does the same job: a push that
+      # passes the tests deploys, and a push that fails them does not.
+      - name: Trigger deploy
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "No RENDER_DEPLOY_HOOK_URL secret set."
+            echo "Either connect the repository in Render, or add the secret to use this path."
+            exit 0
+          fi
+          curl --fail --silent --show-error "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+          echo "Render deploy triggered."
