@@ -31,6 +31,7 @@ pageRoutes.get('/quizzes/:quizId/results', page('results.html'), { maker: true }
 pageRoutes.get('/take/:quizId', page('take.html'));
 pageRoutes.get('/signin', page('signin.html'));
 pageRoutes.get('/signup', page('signup.html'));
+pageRoutes.get('/reset', page('reset.html'));
 
 /** Liveness probe for the hosting platform. Deliberately reveals nothing. */
 pageRoutes.get('/healthz', () => ({ status: 'ok', storage: storageBackend() }));

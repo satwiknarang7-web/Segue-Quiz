@@ -12,12 +12,6 @@ const clientKey = (req) => req.socket?.remoteAddress ?? 'unknown';
 /** Lets any page ask who is viewing it. */
 authRoutes.get('/api/auth/me', ({ req }) => accountService.describe(req));
 
-authRoutes.get('/api/auth/signup-policy', () => {
-  const { open } = accountService.describeSignupCode();
-  // Never echo the code itself - it is printed in the server console only.
-  return { codeRequired: !open };
-});
-
 authRoutes.post('/api/auth/signup', async ({ req, res, body }) => {
   const result = await accountService.signUp(body, clientKey(req));
 
@@ -73,6 +67,14 @@ authRoutes.post('/api/auth/2fa/verify', ({ req, res, body }) => {
     usedRecoveryCode: result.usedRecoveryCode,
     remainingRecoveryCodes: result.remaining,
   });
+});
+
+/** Forgotten password, authorised by the second factor rather than by email. */
+authRoutes.post('/api/auth/reset-password', async ({ req, res, body }) => {
+  const result = await accountService.resetPassword(body, clientKey(req));
+  // Every prior session is gone, including any this browser held.
+  res.setHeader('Set-Cookie', accountService.signOutCookie());
+  sendJson(res, 200, result);
 });
 
 authRoutes.post('/api/auth/signout', ({ res }) => {

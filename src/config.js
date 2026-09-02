@@ -38,13 +38,6 @@ export const config = {
   maxRequestBodyBytes: 256 * 1024,
 
   /**
-   * Quiz makers need a code to register, so that being on the same network as
-   * the server is not enough to become an editor. Set SEGUEQUIZ_OPEN_SIGNUP=true
-   * to drop that requirement (only sensible behind a trusted front door).
-   */
-  openSignup: process.env.SEGUEQUIZ_OPEN_SIGNUP === 'true',
-
-  /**
    * Supabase is used when both of these are set; otherwise quizzes, attempts
    * and accounts stay in JSON files under dataDir. The service_role key
    * bypasses row level security, so it belongs on the server and nowhere else.

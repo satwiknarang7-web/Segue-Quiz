@@ -53,7 +53,6 @@ document.querySelector('#account-form').addEventListener('submit', async (event)
       name: document.querySelector('#name').value,
       email: document.querySelector('#email').value,
       password: document.querySelector('#password').value,
-      signupCode: document.querySelector('#signup-code').value,
     });
 
     if (result.adoptedQuizzes > 0) {
@@ -125,18 +124,6 @@ document.querySelector('#finish').addEventListener('click', () => {
 /* ---- Boot --------------------------------------------------------------- */
 
 async function boot() {
-  // Only ask for the maker code when the server actually requires one.
-  try {
-    const policy = await fetch('/api/auth/signup-policy').then((response) => response.json());
-    if (policy.codeRequired) {
-      const field = document.querySelector('#maker-code-field');
-      field.hidden = false;
-      document.querySelector('#signup-code').required = true;
-    }
-  } catch {
-    // If the check fails, leave the field visible-on-demand rather than blocking sign-up.
-  }
-
   // Someone who created an account but never finished 2FA lands here to resume.
   if (new URLSearchParams(window.location.search).has('resume')) {
     try {

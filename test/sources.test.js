@@ -39,13 +39,15 @@ test('every source file parses', () => {
   }
 });
 
-test('no source file still refers to the old passcode auth', () => {
+test('no source file still refers to the removed passcode or signup-code auth', () => {
   const files = collect(path.join(root, 'src'), '.js');
   for (const file of files) {
     const contents = fs.readFileSync(file, 'utf8');
-    assert.ok(
-      !contents.includes('authService'),
-      `${path.relative(root, file)} references the removed authService`,
-    );
+    for (const removed of ['authService', 'signupCode', 'openSignup']) {
+      assert.ok(
+        !contents.includes(removed),
+        `${path.relative(root, file)} still references the removed ${removed}`,
+      );
+    }
   }
 });

@@ -33,27 +33,21 @@ const failures = new Map();
 let secretsCache = null;
 
 /**
- * Server-wide secrets: the session signing key and the maker sign-up code.
+ * The session signing key.
  *
- * Both come from the environment when set, which is what a deployment must
- * do: a hosted container has no durable disk, so a generated key would be
- * replaced on every restart and sign every maker straight back out.
- *
- * With no environment settings they are generated once into the data
- * directory, which is what makes running locally a single command.
+ * It comes from the environment when set, which is what a deployment must do:
+ * a hosted container has no durable disk, so a generated key would be replaced
+ * on every restart and sign every maker straight back out. With nothing set it
+ * is generated once into the data directory, which keeps local use to one
+ * command.
  */
 function secrets() {
   if (secretsCache) return secretsCache;
 
-  const fromEnvironment = {
-    sessionSecret: process.env.SEGUEQUIZ_SESSION_SECRET ?? '',
-    signupCode: process.env.SEGUEQUIZ_SIGNUP_CODE ?? '',
-  };
-
+  const fromEnvironment = process.env.SEGUEQUIZ_SESSION_SECRET ?? '';
   let stored = {};
-  const needsFile = !fromEnvironment.sessionSecret || !fromEnvironment.signupCode;
 
-  if (needsFile) {
+  if (!fromEnvironment) {
     const file = path.join(config.dataDir, 'secrets.json');
     try {
       stored = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -61,26 +55,16 @@ function secrets() {
       stored = {};
     }
 
-    let dirty = false;
     if (typeof stored.sessionSecret !== 'string' || stored.sessionSecret.length < 32) {
       stored.sessionSecret = crypto.randomBytes(32).toString('hex');
-      dirty = true;
-    }
-    if (typeof stored.signupCode !== 'string' || stored.signupCode.length === 0) {
-      stored.signupCode = createJoinCode(8);
-      dirty = true;
-    }
-    if (dirty) {
       fs.mkdirSync(config.dataDir, { recursive: true });
       fs.writeFileSync(file, JSON.stringify(stored, null, 2), 'utf8');
     }
   }
 
   secretsCache = {
-    sessionSecret: fromEnvironment.sessionSecret || stored.sessionSecret,
-    sessionSecretFromEnvironment: Boolean(fromEnvironment.sessionSecret),
-    signupCode: fromEnvironment.signupCode || stored.signupCode,
-    signupCodeFromEnvironment: Boolean(fromEnvironment.signupCode),
+    sessionSecret: fromEnvironment || stored.sessionSecret,
+    sessionSecretFromEnvironment: Boolean(fromEnvironment),
   };
   return secretsCache;
 }
@@ -243,14 +227,8 @@ function enrolmentDetails(user) {
 export const accountService = {
   COOKIE_NAME,
 
-  describeSignupCode() {
-    const { signupCode, signupCodeFromEnvironment, sessionSecretFromEnvironment } = secrets();
-    return {
-      signupCode,
-      fromEnvironment: signupCodeFromEnvironment,
-      sessionSecretFromEnvironment,
-      open: config.openSignup,
-    };
+  describeSecrets() {
+    return { sessionSecretFromEnvironment: secrets().sessionSecretFromEnvironment };
   },
 
   readSession,
@@ -266,7 +244,7 @@ export const accountService = {
     return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax;${secure} Max-Age=0`;
   },
 
-  async signUp({ name, email, password, signupCode }, clientKey) {
+  async signUp({ name, email, password }, clientKey) {
     assertNotLockedOut(clientKey);
 
     const cleanName = asString(name, 'name', { max: 80 });
@@ -277,13 +255,6 @@ export const accountService = {
 
     if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
       throw badRequest(`Choose a password of at least ${MIN_PASSWORD_LENGTH} characters.`);
-    }
-
-    if (!config.openSignup) {
-      if (!signupCode || !safeEqual(String(signupCode).trim(), secrets().signupCode)) {
-        recordFailure(clientKey);
-        throw new HttpError(403, 'That maker code is not right. Ask whoever runs this server for it.');
-      }
     }
 
     if (userRepository.findByEmail(cleanEmail)) {
@@ -418,6 +389,68 @@ export const accountService = {
 
     recordFailure(clientKey);
     throw badRequest('That code is not right.');
+  },
+
+  /**
+   * Reset a forgotten password.
+   *
+   * There is no mail server to send a reset link through, so the second factor
+   * does the authorising instead: prove you still hold the authenticator, or
+   * spend one of the recovery codes issued at sign-up. Either demonstrates
+   * more than an emailed link does.
+   *
+   * Every existing session is invalidated afterwards, so a password changed
+   * because it may have leaked also boots whoever might be using it.
+   */
+  async resetPassword({ email, code, newPassword }, clientKey) {
+    assertNotLockedOut(clientKey);
+
+    const user = userRepository.findByEmail(email);
+    const rejection = new HttpError(400, 'That email and code do not match an account.');
+
+    if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH) {
+      throw badRequest(`Choose a password of at least ${MIN_PASSWORD_LENGTH} characters.`);
+    }
+
+    // Same failure whether the account is missing or the code is wrong, so this
+    // cannot be used to discover which emails have accounts.
+    if (!user || !user.totpConfirmed) {
+      recordFailure(clientKey);
+      await hashPassword(newPassword, 'decoy-salt');
+      throw rejection;
+    }
+
+    const candidate = String(code ?? '').trim();
+    const recoveryHash = hashRecoveryCode(candidate);
+    const recovery = user.recoveryCodes.find(
+      (entry) => entry.usedAt === null && entry.hash === recoveryHash,
+    );
+
+    if (!verifyTotp(user.totpSecret, candidate) && !recovery) {
+      recordFailure(clientKey);
+      throw rejection;
+    }
+
+    const { salt, hash } = await hashPassword(newPassword);
+    const updated = userRepository.update(user.id, (current) => ({
+      ...current,
+      passwordSalt: salt,
+      passwordHash: hash,
+      // Bumping this invalidates every cookie already issued for the account.
+      tokenVersion: current.tokenVersion + 1,
+      recoveryCodes: recovery
+        ? current.recoveryCodes.map((entry) =>
+            entry.hash === recoveryHash ? { ...entry, usedAt: new Date().toISOString() } : entry,
+          )
+        : current.recoveryCodes,
+    }));
+
+    failures.delete(clientKey);
+    return {
+      user: publicUser(updated),
+      usedRecoveryCode: Boolean(recovery),
+      remainingRecoveryCodes: updated.recoveryCodes.filter((entry) => entry.usedAt === null).length,
+    };
   },
 
   requireUser(req) {

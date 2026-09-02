@@ -124,140 +124,34 @@ service to send through.
 
 ### Who may register
 
-By default, creating a maker account needs the **maker sign-up code** printed in the
-server console. Without it, anyone who can reach the server — which on a LAN means
-anyone who can take your quiz — could register and start editing.
+**Sign-up is open.** Anyone who can reach the site can create a maker account, and a
+maker can build and run their own quizzes. Quizzes are owned by whoever made them, so
+a new maker sees an empty dashboard and cannot read anybody else's quiz, leaderboard
+or answer key — but they can use your server.
 
-Set `SEGUEQUIZ_SIGNUP_CODE` to choose the code yourself, or `SEGUEQUIZ_OPEN_SIGNUP=true`
-to drop the requirement entirely.
+On a public URL that is worth knowing about. If you need it closed again, the honest
+options are to put the site behind something that authenticates first, or to keep it
+on a LAN.
 
 The first account created adopts any quizzes that already existed, so nothing made
 before accounts were introduced is stranded.
 
-## Storing data in Supabase
+### Forgotten passwords
 
-Out of the box everything lives in JSON files under `data/`. Point the app at a
-Supabase project and quizzes, attempts and maker accounts move into Postgres instead.
-Sign-in is untouched — Supabase is the database, not the authentication.
+There is no reset email, because there is no mail server. The second factor does the
+authorising instead: on `/reset`, enter your email, then either the code your
+authenticator is showing or one of the recovery codes from sign-up, then a new
+password.
 
-**1. Create the tables.** In your project: SQL Editor → New query → paste
-[`supabase/migrations/0001_initial_schema.sql`](supabase/migrations/0001_initial_schema.sql)
-→ Run. It is safe to run more than once.
+- A recovery code used this way is spent, and the response says how many remain.
+- Resetting bumps the account's token version, which **signs out every existing
+  session** — so a password changed because it may have leaked also evicts whoever
+  might be holding it.
+- A wrong code and an unknown email return exactly the same error, so the form cannot
+  be used to discover which addresses have accounts.
 
-**2. Set two environment variables.** Both come from Project Settings → API:
-
-```bash
-SUPABASE_URL=https://your-project-ref.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-```
-
-**3. Start the app.** It prints which backend it is using:
-
-```
-Storage:      Supabase (1 users, 3 quizzes, 6 attempts)
-```
-
-Set neither and it stays on JSON files; set only one and it refuses to start rather
-than silently writing somewhere you did not expect.
-
-### How it connects
-
-Through Supabase's PostgREST endpoint (`/rest/v1`) over plain `fetch` — no client
-library, so the project keeps its zero dependencies.
-
-The `service_role` key is used, which bypasses row level security. That is deliberate
-and safe here because **the key never leaves the server**: browsers talk to SegueQuiz,
-and SegueQuiz talks to Supabase. Every rule about who may see what — a taker not
-seeing the answer key, a maker not seeing another maker's quizzes — is enforced in the
-application, exactly as before. RLS is switched on with no policies, so if that key
-ever did leak into a browser, the anon role still reads nothing.
-
-### What is stored, and what is not
-
-Questions live in a `jsonb` column on `quizzes`, and answers likewise on `attempts`.
-A quiz is always read and written whole, and question order is part of the document,
-so separate tables would buy joins nobody makes and lose ordering for free.
-
-The session signing key and maker sign-up code stay in `data/secrets.json`. They are
-server configuration rather than application data, and keeping them out of the
-database means a database dump carries no ability to mint sessions.
-
-### The one limitation to know
-
-Rows are read into memory once at start-up; every change is applied there and written
-through to Postgres on a queue. This keeps the whole application above the store layer
-synchronous and unchanged — it is exactly how the JSON store already behaved.
-
-The cost: **this process is the live copy.** Editing rows in the Supabase dashboard,
-or running a second instance against the same project, will not be seen until a
-restart. For one server running one event — what this app is for — that is fine. Making
-Supabase the live source of truth means making the repositories async, which ripples
-through every service and route.
-
-Writes that fail are logged and skipped rather than crashing the app, and the queue
-keeps working afterwards, so a brief network blip loses a write rather than the event.
-
-## Deploying it
-
-The app is a long-running Node process, so it belongs on a container host —
-Render, Railway, Fly, or anything that runs a container. A `render.yaml` blueprint
-and a `Dockerfile` are both included.
-
-It is **not** suited to Vercel or other serverless platforms without change: rows are
-held in memory per process, so separate instances would disagree about who is
-mid-attempt, and the ephemeral disk would mint a new session key on every cold start.
-Making that work means an async data layer — see the note at the end of the Supabase
-section.
-
-### On Render
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/satwiknarang7-web/Segue-Quiz)
-
-That button reads `render.yaml` from the repository and pre-fills everything except the
-values marked `sync: false`, which it prompts for.
-
-By hand instead: Render → **New** → **Blueprint** → pick the repository.
-
-### Anywhere that runs a container
-
-```bash
-docker build -t seguequiz .
-```
-
-```bash
-docker run -p 4000:4000 --env-file .env seguequiz
-```
-
-Point the platform's health check at `/healthz`.
-
-### What to set, and why it matters
-
-| Variable | Why |
-| --- | --- |
-| `SEGUEQUIZ_SESSION_SECRET` | Signs session cookies. Without it a fresh key is generated on every restart, signing every maker out. `render.yaml` generates and keeps one for you. |
-| `SEGUEQUIZ_SIGNUP_CODE` | The code needed to register a maker. Otherwise it changes on every restart. |
-| `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | **Without these the container's disk is the database, and a redeploy wipes every quiz, account and result.** |
-
-The app tells you when it is running hosted without them:
-
-```
-! Storage is JSON files on a hosted container.
-    Every redeploy or restart wipes quizzes, accounts and results.
-    Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
-```
-
-You do not need to set `PUBLIC_BASE_URL`: Render, Railway and Fly each announce their
-own public address and the app picks it up, so QR codes encode the right URL. Set it
-by hand for a custom domain.
-
-Once the app knows it is served over HTTPS, session cookies are marked `Secure`.
-
-### Free tiers
-
-Render's free web services spin down after a spell of inactivity, and the next request
-can take up to a minute while the instance wakes. The first person to scan a QR code
-after a quiet period waits; everyone after them does not. Open the URL yourself a
-couple of minutes before an event starts, and it will be warm.
+Lose both the phone and the recovery codes and nobody can help: delete that row from
+the `users` table and sign up again.
 
 ## Configuration
 
@@ -273,8 +167,6 @@ All optional, set as environment variables:
 | `SEGUEQUIZ_DATA_DIR` | `./data` | Where JSON data and server secrets live. |
 | `SUPABASE_URL` | unset | Supabase project URL. Set with the key below to use Postgres. |
 | `SUPABASE_SERVICE_ROLE_KEY` | unset | Supabase service_role key. Server-side only. |
-| `SEGUEQUIZ_SIGNUP_CODE` | generated | The code needed to register a maker account. |
-| `SEGUEQUIZ_OPEN_SIGNUP` | `false` | `true` lets anyone register without a code. |
 
 If the QR code points somewhere a phone cannot reach, that is what `PUBLIC_BASE_URL`
 is for:
@@ -307,7 +199,7 @@ src/
   repositories/          Data access for quizzes, attempts and users
   services/              Domain rules: accounts, authoring, attempts, leaderboard
   routes/                Route definitions grouped by area
-public/                  Landing, auth, dashboard, editor, take, results
+public/                  Landing, auth, reset, dashboard, editor, take, results
   css/                   app.css (shared), landing.css, auth.css
   img/                   SegueIT logo, light and dark tints
 scripts/                 One-off importers
@@ -355,13 +247,13 @@ Everything else is public.
 | Method | Path | Purpose | |
 | --- | --- | --- | --- |
 | `GET` | `/api/auth/me` | Who is viewing, and at which stage | |
-| `GET` | `/api/auth/signup-policy` | Whether a maker code is required | |
 | `POST` | `/api/auth/signup` | Create a maker account | |
 | `POST` | `/api/auth/signin` | Step one: email and password | |
 | `GET` | `/api/auth/2fa/setup` | Enrolment secret and QR link | pending |
 | `GET` | `/api/auth/2fa/qr.svg` | Enrolment QR for an authenticator app | pending |
 | `POST` | `/api/auth/2fa/activate` | Finish enrolment, receive recovery codes | pending |
 | `POST` | `/api/auth/2fa/verify` | Step two: authenticator or recovery code | pending |
+| `POST` | `/api/auth/reset-password` | New password, authorised by the second factor | |
 | `POST` | `/api/auth/signout` | Sign out | |
 | `GET` | `/api/quizzes` | List quizzes with counts | maker |
 | `POST` | `/api/quizzes` | Create a quiz | maker |
@@ -392,8 +284,11 @@ Participant-facing endpoints never include `correctIndex`; scoring happens on th
 RAG, LLMs and automation) from its Google Form into a running server:
 
 ```bash
-SEGUEQUIZ_PASSCODE=your-passcode node scripts/import-ai-quiz.mjs
+SEGUEQUIZ_URL=https://your-app.onrender.com SEGUEQUIZ_EMAIL=you@example.com SEGUEQUIZ_PASSWORD='your password' SEGUEQUIZ_TOTP=123456 node scripts/import-ai-quiz.mjs
 ```
+
+`SEGUEQUIZ_TOTP` is the six digits your authenticator is showing at that moment, so
+run it straight after reading them. The quiz is created under that maker's account.
 
 Google does not publish a form's answer key, so the `correctIndex` values in that
 script were derived from the subject matter rather than copied from the form. Check

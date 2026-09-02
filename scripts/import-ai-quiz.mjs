@@ -10,11 +10,22 @@
  * below were derived from the subject matter rather than copied from the form.
  * Check them against your own key before running the quiz for real.
  *
- * Set SEGUEQUIZ_URL and SEGUEQUIZ_PASSCODE if they differ from the defaults.
+ * Sign in with your own maker account by setting four variables:
+ *
+ *   SEGUEQUIZ_URL       the site, e.g. https://your-app.onrender.com
+ *   SEGUEQUIZ_EMAIL     your maker email
+ *   SEGUEQUIZ_PASSWORD  your password
+ *   SEGUEQUIZ_TOTP      the six digits your authenticator shows right now
+ *
+ * SEGUEQUIZ_TOTP is the six-digit code your authenticator is showing right
+ * now. It is only valid for about 30 seconds, so run this straight after
+ * reading it.
  */
 
 const BASE_URL = (process.env.SEGUEQUIZ_URL ?? 'http://localhost:4000').replace(/\/+$/, '');
-const PASSCODE = process.env.SEGUEQUIZ_PASSCODE;
+const EMAIL = process.env.SEGUEQUIZ_EMAIL;
+const PASSWORD = process.env.SEGUEQUIZ_PASSWORD;
+const TOTP = process.env.SEGUEQUIZ_TOTP;
 
 const QUIZ = {
   title: 'SegueIT AI Quiz',
@@ -170,8 +181,9 @@ const QUESTIONS = [
   },
 ];
 
-if (!PASSCODE) {
-  console.error('Set SEGUEQUIZ_PASSCODE to the organiser passcode printed when the server started.');
+if (!EMAIL || !PASSWORD || !TOTP) {
+  console.error('Set SEGUEQUIZ_EMAIL, SEGUEQUIZ_PASSWORD and SEGUEQUIZ_TOTP.');
+  console.error('SEGUEQUIZ_TOTP is the code your authenticator app is showing right now.');
   process.exit(1);
 }
 
@@ -192,9 +204,18 @@ async function call(method, path, body) {
   return { payload, response };
 }
 
-const signIn = await call('POST', '/api/session', { passcode: PASSCODE });
+// Step one: password. This yields a half-session that unlocks only the 2FA step.
+const signIn = await call('POST', '/api/auth/signin', { email: EMAIL, password: PASSWORD });
 cookie = (signIn.response.headers.get('set-cookie') ?? '').split(';')[0];
-if (!cookie) throw new Error('No session cookie returned.');
+if (!cookie) throw new Error('No session cookie returned from sign in.');
+
+if (signIn.payload?.needsEnrolment) {
+  throw new Error('That account has not finished setting up two-factor authentication.');
+}
+
+// Step two: the authenticator code, which upgrades it to a usable session.
+const verified = await call('POST', '/api/auth/2fa/verify', { code: TOTP });
+cookie = (verified.response.headers.get('set-cookie') ?? '').split(';')[0] || cookie;
 
 const { payload: created } = await call('POST', '/api/quizzes', QUIZ);
 const quizId = created.quiz.id;

@@ -47,7 +47,6 @@ const server = http.createServer((req, res) => {
 
 server.listen(config.port, config.host, () => {
   const baseUrl = resolveBaseUrl();
-  const { signupCode, fromEnvironment, open } = accountService.describeSignupCode();
 
   console.log('');
   console.log('  SegueQuiz is running');
@@ -77,7 +76,7 @@ server.listen(config.port, config.host, () => {
       ]);
     }
 
-    if (!accountService.describeSignupCode().sessionSecretFromEnvironment) {
+    if (!accountService.describeSecrets().sessionSecretFromEnvironment) {
       warnings.push([
         'SEGUEQUIZ_SESSION_SECRET is not set.',
         'A new signing key is generated on every restart, which signs every maker out.',
@@ -99,16 +98,7 @@ server.listen(config.port, config.host, () => {
     if (warnings.length) console.log('');
   }
 
-  if (open) {
-    console.log('  Sign-up is OPEN - anyone who can reach this server can register as a maker.');
-  } else {
-    console.log(`  Maker sign-up code: ${signupCode}`);
-    console.log(
-      fromEnvironment
-        ? '  (from SEGUEQUIZ_SIGNUP_CODE)'
-        : '  Needed once, to register a quiz maker account. Quiz takers never need it.',
-    );
-  }
+  console.log('  Anyone who can reach this address can register as a quiz maker.');
   console.log('');
 });
 

@@ -7,7 +7,6 @@ import path from 'node:path';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seguequiz-access-'));
 process.env.SEGUEQUIZ_DATA_DIR = dataDir;
-process.env.SEGUEQUIZ_SIGNUP_CODE = 'MAKER-CODE';
 
 const { handleRequest } = await import('../src/app.js');
 const { quizService } = await import('../src/services/quizService.js');
@@ -55,7 +54,6 @@ async function createMaker(overrides = {}) {
       name: `Maker ${makerCount}`,
       email,
       password: 'a-long-enough-password',
-      signupCode: 'MAKER-CODE',
       ...overrides,
     },
   });
@@ -92,17 +90,113 @@ async function seedQuiz(cookie) {
 
 /* ---- Sign up and 2FA ---- */
 
-test('signing up requires the maker code', async () => {
+test('anyone may sign up - no code required', async () => {
+  const created = await call('POST', '/api/auth/signup', {
+    body: { name: 'Open', email: 'open@example.test', password: 'a-long-enough-password' },
+  });
+  assert.equal(created.status, 201);
+  assert.ok(userRepository.findByEmail('open@example.test'));
+});
+
+test('a short password is still refused', async () => {
   const refused = await call('POST', '/api/auth/signup', {
+    body: { name: 'Short', email: 'short@example.test', password: 'tiny' },
+  });
+  assert.equal(refused.status, 400);
+  assert.equal(userRepository.findByEmail('short@example.test'), null);
+});
+
+/* ---- Password reset ---- */
+
+test('an authenticator code resets a forgotten password', async () => {
+  const maker = await createMaker();
+
+  const reset = await call('POST', '/api/auth/reset-password', {
     body: {
-      name: 'Nope',
-      email: 'nope@example.test',
-      password: 'a-long-enough-password',
-      signupCode: 'WRONG',
+      email: maker.email,
+      code: generateTotp(maker.secret),
+      newPassword: 'a-brand-new-password',
     },
   });
-  assert.equal(refused.status, 403);
-  assert.equal(userRepository.findByEmail('nope@example.test'), null);
+  assert.equal(reset.status, 200);
+  assert.equal((await reset.json()).usedRecoveryCode, false);
+
+  // The old password is dead.
+  const stale = await call('POST', '/api/auth/signin', {
+    body: { email: maker.email, password: 'a-long-enough-password' },
+  });
+  assert.equal(stale.status, 401);
+
+  // The new one works, and still demands the second factor.
+  const fresh = await call('POST', '/api/auth/signin', {
+    body: { email: maker.email, password: 'a-brand-new-password' },
+  });
+  assert.equal(fresh.status, 200);
+  assert.equal((await call('GET', '/api/quizzes', { cookie: cookieOf(fresh) })).status, 401);
+
+  const verified = await call('POST', '/api/auth/2fa/verify', {
+    cookie: cookieOf(fresh),
+    body: { code: generateTotp(maker.secret) },
+  });
+  assert.equal((await call('GET', '/api/quizzes', { cookie: cookieOf(verified) })).status, 200);
+});
+
+test('a recovery code resets the password and is then spent', async () => {
+  const maker = await createMaker();
+  const [code] = maker.recoveryCodes;
+
+  const first = await call('POST', '/api/auth/reset-password', {
+    body: { email: maker.email, code, newPassword: 'first-new-password' },
+  });
+  assert.equal(first.status, 200);
+  const body = await first.json();
+  assert.equal(body.usedRecoveryCode, true);
+  assert.equal(body.remainingRecoveryCodes, 7);
+
+  const reused = await call('POST', '/api/auth/reset-password', {
+    body: { email: maker.email, code, newPassword: 'second-new-password' },
+  });
+  assert.equal(reused.status, 400, 'a recovery code is single use');
+});
+
+test('resetting a password signs every existing session out', async () => {
+  const maker = await createMaker();
+  assert.equal((await call('GET', '/api/quizzes', { cookie: maker.cookie })).status, 200);
+
+  await call('POST', '/api/auth/reset-password', {
+    body: { email: maker.email, code: generateTotp(maker.secret), newPassword: 'rotated-password' },
+  });
+
+  assert.equal(
+    (await call('GET', '/api/quizzes', { cookie: maker.cookie })).status,
+    401,
+    'the cookie held before the reset must stop working',
+  );
+});
+
+test('a reset is refused without a valid second factor, and leaks nothing', async () => {
+  const maker = await createMaker();
+
+  const wrongCode = await call('POST', '/api/auth/reset-password', {
+    body: { email: maker.email, code: '000000', newPassword: 'should-not-apply' },
+  });
+  const unknownEmail = await call('POST', '/api/auth/reset-password', {
+    body: { email: 'ghost@example.test', code: '000000', newPassword: 'should-not-apply' },
+  });
+
+  assert.equal(wrongCode.status, 400);
+  assert.equal(unknownEmail.status, 400);
+  assert.deepEqual(
+    await wrongCode.json(),
+    await unknownEmail.json(),
+    'the same answer either way, so accounts cannot be discovered',
+  );
+
+  // The original password still works.
+  const signin = await call('POST', '/api/auth/signin', {
+    body: { email: maker.email, password: 'a-long-enough-password' },
+  });
+  assert.equal(signin.status, 200);
 });
 
 test('a password alone does not sign you in - the second factor is required', async () => {
