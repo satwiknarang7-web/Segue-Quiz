@@ -24,20 +24,19 @@ jobs:
   deploy:
     name: Deploy to Render
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Skipped outright when the secret is absent, rather than running and
+    # exiting zero: a green "deployed" that deployed nothing is worse than
+    # no result at all.
+    if: >-
+      github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+      && secrets.RENDER_DEPLOY_HOOK_URL != ''
     runs-on: ubuntu-latest
     steps:
       # Render only opens a webhook of its own once its GitHub app is connected
-      # to the repository. Until then this hook does the same job: a push that
-      # passes the tests deploys, and a push that fails them does not.
+      # to the repository. Until then this hook does the same job, and better:
+      # a push that passes the tests deploys, one that fails them does not.
       - name: Trigger deploy
-        env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
-          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
-            echo "No RENDER_DEPLOY_HOOK_URL secret set."
-            echo "Either connect the repository in Render, or add the secret to use this path."
-            exit 0
-          fi
-          curl --fail --silent --show-error "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+          curl --fail --silent --show-error "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" > /dev/null
           echo "Render deploy triggered."
