@@ -24,19 +24,27 @@ jobs:
   deploy:
     name: Deploy to Render
     needs: test
-    # Skipped outright when the secret is absent, rather than running and
-    # exiting zero: a green "deployed" that deployed nothing is worse than
-    # no result at all.
-    if: >-
-      github.event_name == 'push'
-      && github.ref == 'refs/heads/main'
-      && secrets.RENDER_DEPLOY_HOOK_URL != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+
+    # The secrets context is not available to a job-level `if`, but env is
+    # available to a step-level one, so the check happens per step below.
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
     steps:
       # Render only opens a webhook of its own once its GitHub app is connected
       # to the repository. Until then this hook does the same job, and better:
       # a push that passes the tests deploys, one that fails them does not.
       - name: Trigger deploy
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
         run: |
-          curl --fail --silent --show-error "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" > /dev/null
+          curl --fail --silent --show-error "$RENDER_DEPLOY_HOOK_URL" > /dev/null
           echo "Render deploy triggered."
+
+      # Without this the job would go green having done nothing, which reads
+      # as "deployed". The annotation says plainly that it did not.
+      - name: Report that no deploy happened
+        if: env.RENDER_DEPLOY_HOOK_URL == ''
+        run: |
+          echo "::notice title=Nothing deployed::No RENDER_DEPLOY_HOOK_URL secret is set, so this push was not deployed. Connect the repository in Render, or add the secret."
