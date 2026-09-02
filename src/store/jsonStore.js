@@ -50,6 +50,11 @@ export class JsonStore {
   }
 
   /** Resolves once every queued write has hit the disk. */
+  /** JSON files have no schema to check. */
+  async assertColumns() {
+    return true;
+  }
+
   flushed() {
     return this.#writeQueue;
   }

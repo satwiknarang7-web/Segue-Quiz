@@ -5,6 +5,7 @@ const toRow = (attempt) => ({
   quiz_id: attempt.quizId,
   participant_name: attempt.participantName,
   participant_key: attempt.participantKey,
+  device_id: attempt.deviceId ?? null,
   status: attempt.status,
   started_at: attempt.startedAt,
   deadline_at: attempt.deadlineAt,
@@ -26,6 +27,7 @@ const fromRow = (row) => ({
   quizId: row.quiz_id,
   participantName: row.participant_name,
   participantKey: row.participant_key,
+  deviceId: row.device_id ?? null,
   status: row.status,
   startedAt: asIso(row.started_at),
   deadlineAt: asIso(row.deadline_at),
@@ -40,7 +42,14 @@ const fromRow = (row) => ({
   answeredCount: row.answered_count,
 });
 
-const store = createStore({ file: 'attempts.json', table: 'attempts', toRow, fromRow });
+const store = createStore({
+  file: 'attempts.json',
+  table: 'attempts',
+  toRow,
+  fromRow,
+  // Added by supabase/migrations/0002_attempt_device.sql.
+  requiredColumns: ['id', 'device_id'],
+});
 
 export const attemptRepository = {
   findById(id) {
@@ -65,6 +74,28 @@ export const attemptRepository = {
         attempt.quizId === quizId &&
         attempt.status === 'submitted' &&
         attempt.participantKey === normalisedName,
+    );
+  },
+
+  /** Any finished attempt from this browser, whatever name was typed. */
+  findSubmittedByDevice(quizId, deviceId) {
+    if (!deviceId) return null;
+    return store.find(
+      (attempt) =>
+        attempt.quizId === quizId &&
+        attempt.status === 'submitted' &&
+        attempt.deviceId === deviceId,
+    );
+  },
+
+  /** An attempt this browser still has running, whatever name was typed. */
+  findInProgressByDevice(quizId, deviceId) {
+    if (!deviceId) return null;
+    return store.find(
+      (attempt) =>
+        attempt.quizId === quizId &&
+        attempt.status === 'in_progress' &&
+        attempt.deviceId === deviceId,
     );
   },
 

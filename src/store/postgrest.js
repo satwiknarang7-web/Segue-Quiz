@@ -52,6 +52,12 @@ export function createPostgrestClient({ url, serviceRoleKey, fetchImpl = fetch }
       return send('GET', `/${encodeURIComponent(table)}?select=*`, { table });
     },
 
+    /** Read nothing, but fail if any of these columns is absent. */
+    selectColumns(table, columns) {
+      const select = columns.map(encodeURIComponent).join(',');
+      return send('GET', `/${encodeURIComponent(table)}?select=${select}&limit=1`, { table });
+    },
+
     /** Insert or replace one row, keyed on the primary key. */
     upsert(table, row) {
       return send('POST', `/${encodeURIComponent(table)}`, {

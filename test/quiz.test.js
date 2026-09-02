@@ -226,6 +226,78 @@ test('rejects answers once the deadline has passed', () => {
   );
 });
 
+/* ---- One attempt per person ---- */
+
+test('a second attempt from the same device is refused, whatever name is typed', () => {
+  const quiz = makeQuiz();
+  const device = 'device-aaa';
+
+  const first = attemptService.start(quiz.id, { participantName: 'Priya' }, device);
+  attemptService.submit(first.attempt.attemptId, { answers: answersFor(quiz, 0, 0) });
+
+  // The same name is refused, as before.
+  assert.throws(
+    () => attemptService.start(quiz.id, { participantName: 'Priya' }, device),
+    /already taken this quiz/i,
+  );
+
+  // And so is a different name from the same browser - the actual hole.
+  assert.throws(
+    () => attemptService.start(quiz.id, { participantName: 'Totally Someone Else' }, device),
+    /device has already taken/i,
+  );
+});
+
+test('a different device may still take the quiz', () => {
+  const quiz = makeQuiz();
+
+  const first = attemptService.start(quiz.id, { participantName: 'Priya' }, 'device-aaa');
+  attemptService.submit(first.attempt.attemptId, { answers: answersFor(quiz, 0, 0) });
+
+  assert.doesNotThrow(() =>
+    attemptService.start(quiz.id, { participantName: 'Rahul' }, 'device-bbb'),
+  );
+});
+
+test('retyping a new name mid-attempt resumes rather than restarting the clock', () => {
+  const quiz = makeQuiz({ timeLimitSeconds: 300 });
+  const device = 'device-ccc';
+
+  const started = attemptService.start(quiz.id, { participantName: 'First Name' }, device);
+  backdate(started.attempt.attemptId, 60_000);
+
+  const again = attemptService.start(quiz.id, { participantName: 'Second Name' }, device);
+
+  assert.equal(again.resumed, true);
+  assert.equal(again.attempt.attemptId, started.attempt.attemptId, 'the same attempt continues');
+  assert.ok(again.attempt.remainingMs <= 240_500, 'the timer kept running, it did not reset');
+});
+
+test('allowing retakes lifts both checks', () => {
+  const quiz = makeQuiz();
+  quizService.update(quiz.id, { allowRetakes: true });
+
+  const first = attemptService.start(quiz.id, { participantName: 'Repeat' }, 'device-ddd');
+  attemptService.submit(first.attempt.attemptId, { answers: answersFor(quiz, 0, 0) });
+
+  const second = attemptService.start(quiz.id, { participantName: 'Repeat' }, 'device-ddd');
+  assert.notEqual(second.attempt.attemptId, first.attempt.attemptId);
+});
+
+test('a taker with no device marker still gets the name check', () => {
+  const quiz = makeQuiz();
+
+  const first = attemptService.start(quiz.id, { participantName: 'Cookieless' }, null);
+  attemptService.submit(first.attempt.attemptId, { answers: answersFor(quiz, 0, 0) });
+
+  assert.throws(
+    () => attemptService.start(quiz.id, { participantName: 'Cookieless' }, null),
+    /already taken this quiz/i,
+  );
+  // Two different people who both block cookies must not block each other.
+  assert.doesNotThrow(() => attemptService.start(quiz.id, { participantName: 'Nobody Else' }, null));
+});
+
 /* ---- Leaving the quiz ---- */
 
 test('leaving the quiz ends the attempt and scores what was answered', () => {

@@ -55,6 +55,8 @@ create table if not exists public.attempts (
   quiz_id           text        not null references public.quizzes(id) on delete cascade,
   participant_name  text        not null,
   participant_key   text        not null,
+  -- Opaque per-browser marker, so a second attempt under a new name is caught.
+  device_id         text,
   status            text        not null check (status in ('in_progress', 'submitted')),
   started_at        timestamptz not null,
   deadline_at       timestamptz not null,
@@ -72,6 +74,8 @@ create table if not exists public.attempts (
 create index if not exists attempts_quiz_id_idx on public.attempts (quiz_id);
 create index if not exists attempts_quiz_participant_idx
   on public.attempts (quiz_id, participant_key);
+create index if not exists attempts_quiz_device_idx
+  on public.attempts (quiz_id, device_id);
 create index if not exists attempts_leaderboard_idx
   on public.attempts (quiz_id, score desc, duration_ms asc)
   where status = 'submitted';

@@ -21,11 +21,34 @@ export class SupabaseStore {
   #writeQueue = Promise.resolve();
   #loaded = false;
 
-  constructor({ url, serviceRoleKey, table, toRow, fromRow, fetchImpl }) {
+  #requiredColumns;
+
+  constructor({ url, serviceRoleKey, table, toRow, fromRow, fetchImpl, requiredColumns = [] }) {
     this.#client = createPostgrestClient({ url, serviceRoleKey, fetchImpl });
     this.#table = table;
     this.#toRow = toRow;
     this.#fromRow = fromRow;
+    this.#requiredColumns = requiredColumns;
+  }
+
+  /**
+   * Ask Postgres for the columns this build needs. A database that has not had
+   * the latest migration run answers with an error naming the missing column,
+   * which is a far better failure than writes silently breaking later.
+   */
+  async assertColumns() {
+    if (this.#requiredColumns.length === 0) return true;
+
+    try {
+      await this.#client.selectColumns(this.#table, this.#requiredColumns);
+      return true;
+    } catch (error) {
+      throw new Error(
+        `The "${this.#table}" table is missing a column this version needs ` +
+          `(${this.#requiredColumns.join(', ')}). Run the migrations in supabase/migrations. ` +
+          `Postgres said: ${error.message}`,
+      );
+    }
   }
 
   get table() {

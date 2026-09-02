@@ -50,6 +50,7 @@ async function loadIntro() {
     );
 
     document.querySelector('#leave-warning').hidden = !intro.endOnLeave;
+    document.querySelector('#one-attempt-note').hidden = intro.allowRetakes;
 
     showView('intro');
 

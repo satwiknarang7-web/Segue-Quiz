@@ -104,7 +104,7 @@ export const attemptService = {
     }
   },
 
-  start(quizId, payload = {}) {
+  start(quizId, payload = {}, deviceId = null) {
     const quiz = quizService.requireQuiz(quizId);
 
     if (!quiz.isPublished) throw conflict('This quiz is not open yet.');
@@ -117,16 +117,13 @@ export const attemptService = {
 
     attemptService.finaliseExpired(quiz.id);
 
-    if (!quiz.allowRetakes) {
-      const previous = attemptRepository.findSubmittedByParticipant(quiz.id, participantKey);
-      if (previous) {
-        throw conflict(`"${participantName}" has already taken this quiz.`);
-      }
-    }
+    // A refresh must not hand out a fresh timer, and neither must retyping a
+    // different name. Resume whatever this browser already has running before
+    // any other check, so an attempt in flight is always continued.
+    const running =
+      attemptRepository.findInProgressByDevice(quiz.id, deviceId) ??
+      attemptRepository.findInProgressByParticipant(quiz.id, participantKey);
 
-    // A refresh must not hand out a fresh timer: resume the attempt already
-    // running for this participant, keeping its deadline and saved answers.
-    const running = attemptRepository.findInProgressByParticipant(quiz.id, participantKey);
     if (running) {
       return {
         attempt: toAttemptState(running, quiz),
@@ -135,12 +132,24 @@ export const attemptService = {
       };
     }
 
+    if (!quiz.allowRetakes) {
+      // Two independent checks. The name stops the same person signing in
+      // again; the device stops them simply typing a different name.
+      if (attemptRepository.findSubmittedByParticipant(quiz.id, participantKey)) {
+        throw conflict(`"${participantName}" has already taken this quiz.`);
+      }
+      if (attemptRepository.findSubmittedByDevice(quiz.id, deviceId)) {
+        throw conflict('This device has already taken the quiz. Each person gets one attempt.');
+      }
+    }
+
     const startedAt = new Date();
     const attempt = attemptRepository.insert({
       id: createId(),
       quizId: quiz.id,
       participantName,
       participantKey,
+      deviceId,
       status: 'in_progress',
       startedAt: startedAt.toISOString(),
       deadlineAt: new Date(startedAt.getTime() + quiz.timeLimitSeconds * 1000).toISOString(),

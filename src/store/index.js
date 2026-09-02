@@ -11,7 +11,7 @@ import { SupabaseStore } from './supabaseStore.js';
 
 const stores = [];
 
-export function createStore({ file, table, toRow, fromRow }) {
+export function createStore({ file, table, toRow, fromRow, requiredColumns = [] }) {
   const store = config.supabase.enabled
     ? new SupabaseStore({
         url: config.supabase.url,
@@ -19,6 +19,7 @@ export function createStore({ file, table, toRow, fromRow }) {
         table,
         toRow,
         fromRow,
+        requiredColumns,
       })
     : new JsonStore(path.join(config.dataDir, file));
 
@@ -44,6 +45,9 @@ export async function initialiseStores() {
 
   const loaded = {};
   for (const store of stores) {
+    // Catch a database that predates a migration here, at start-up, rather
+    // than when the first person tries to take a quiz.
+    await store.assertColumns();
     loaded[store.table] = await store.load();
   }
   return { backend: 'supabase', loaded };

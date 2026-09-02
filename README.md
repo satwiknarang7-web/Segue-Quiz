@@ -47,6 +47,24 @@ deadline is stored with the attempt. That means:
   answered, and the recorded time is capped at the limit.
 - An attempt abandoned entirely is finalised the next time results are viewed.
 
+### One attempt per person
+
+With **Allow more than one attempt per person** off (the default), a quiz is refused a
+second time on two independent checks:
+
+- the participant's name, normalised, so signing in again as "priya" or " Priya " is caught; and
+- an opaque per-browser cookie, so retyping a different name does not start a fresh attempt.
+
+The cookie also keys the resume: reloading, or typing a new name mid-attempt, continues
+the attempt already running with its original deadline rather than handing out a fresh
+timer.
+
+**This is not airtight, and cannot be.** Takers have no accounts, so identity is a
+self-declared name plus a cookie. Anyone willing to open a private window, clear site
+data, or pick up a second phone gets another go. It stops the casual retake, which is
+what it is for. A real guarantee needs takers to sign in, which is a much bigger change
+— ask if you want it.
+
 ### Leaving the quiz
 
 By default an attempt **ends the moment the taker leaves the screen** — switching browser
