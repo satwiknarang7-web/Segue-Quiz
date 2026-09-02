@@ -251,9 +251,10 @@ Once the app knows it is served over HTTPS, session cookies are marked `Secure`.
 
 ### Free tiers
 
-Render's and Railway's free instances sleep when idle and take roughly 30 seconds to
-wake. The first person to scan a QR code after a quiet spell waits; everyone after
-them does not. Worth opening the URL yourself a minute before an event starts.
+Render's free web services spin down after a spell of inactivity, and the next request
+can take up to a minute while the instance wakes. The first person to scan a QR code
+after a quiet period waits; everyone after them does not. Open the URL yourself a
+couple of minutes before an event starts, and it will be warm.
 
 ## Configuration
 
