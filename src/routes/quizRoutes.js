@@ -167,6 +167,13 @@ quizRoutes.get(
   maker,
 );
 
+/** Remove one person's result, letting just them take the quiz again. */
+quizRoutes.delete(
+  '/api/quizzes/:quizId/attempts/:attemptId',
+  ({ params, user }) => quizService.removeAttempt(params.quizId, params.attemptId, user.id),
+  maker,
+);
+
 /** Clear the leaderboard without deleting the quiz. */
 quizRoutes.delete(
   '/api/quizzes/:quizId/results',

@@ -279,6 +279,21 @@
       </section>
     </main>
 
+    <dialog id="submit-dialog" aria-labelledby="submit-dialog-title">
+      <form method="dialog" class="dialog__body stack">
+        <h2 id="submit-dialog-title">Submit your answers?</h2>
+        <p class="meta" id="submit-summary"></p>
+        <p class="notice notice--warning" id="submit-unanswered" hidden></p>
+        <p class="meta">Once submitted you cannot change your answers.</p>
+        <div class="row" style="justify-content: flex-end">
+          <button class="button button--ghost" type="button" id="submit-cancel">
+            Keep answering
+          </button>
+          <button class="button" type="button" id="submit-confirm">Submit</button>
+        </div>
+      </form>
+    </dialog>
+
     <script type="module" src="/js/take.js"></script>
   </body>
 </html>

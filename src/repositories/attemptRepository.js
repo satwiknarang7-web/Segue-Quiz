@@ -116,6 +116,10 @@ export const attemptRepository = {
     return store.update(id, updater);
   },
 
+  remove(id) {
+    return store.remove(id);
+  },
+
   removeByQuiz(quizId) {
     return store.removeWhere((attempt) => attempt.quizId === quizId);
   },

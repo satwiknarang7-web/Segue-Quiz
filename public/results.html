@@ -128,6 +128,18 @@
           </p>
         </div>
         <div class="table-wrap">
+          <div class="row" style="margin-bottom: 14px">
+            <input
+              id="leaderboard-search"
+              type="search"
+              placeholder="Search participants"
+              autocomplete="off"
+              style="max-width: 280px"
+              aria-label="Search participants"
+            />
+            <span class="meta" id="search-summary"></span>
+          </div>
+
           <table>
             <thead>
               <tr>
@@ -137,6 +149,7 @@
                 <th class="numeric">Correct</th>
                 <th class="numeric">Time</th>
                 <th>Submitted</th>
+                <th style="width: 44px"><span class="sr-only">Remove</span></th>
               </tr>
             </thead>
             <tbody id="leaderboard-body"></tbody>

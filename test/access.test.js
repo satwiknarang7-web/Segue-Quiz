@@ -512,6 +512,83 @@ test('clearing a leaderboard lets the same person take the quiz again', async ()
   assert.equal(again.status, 200, 'clearing resets who has already taken it');
 });
 
+test('removing one result lets only that person retake the quiz', async () => {
+  const maker = await createMaker();
+  const quiz = await seedQuiz(maker.cookie);
+
+  const take = async (name) => {
+    const started = await (
+      await call('POST', `/api/quizzes/${quiz.id}/attempts`, { body: { participantName: name } })
+    ).json();
+    await call('POST', `/api/attempts/${started.attempt.attemptId}/submit`, { body: {} });
+    return started.attempt.attemptId;
+  };
+
+  const adaAttempt = await take('Ada');
+  await take('Grace');
+
+  // Both are locked out to begin with.
+  assert.equal(
+    (await call('POST', `/api/quizzes/${quiz.id}/attempts`, { body: { participantName: 'Ada' } }))
+      .status,
+    409,
+  );
+
+  const removed = await call('DELETE', `/api/quizzes/${quiz.id}/attempts/${adaAttempt}`, {
+    cookie: maker.cookie,
+  });
+  assert.equal(removed.status, 200);
+  assert.equal((await removed.json()).participantName, 'Ada');
+
+  // Ada is free, Grace is not.
+  assert.equal(
+    (await call('POST', `/api/quizzes/${quiz.id}/attempts`, { body: { participantName: 'Ada' } }))
+      .status,
+    200,
+  );
+  assert.equal(
+    (await call('POST', `/api/quizzes/${quiz.id}/attempts`, { body: { participantName: 'Grace' } }))
+      .status,
+    409,
+    "removing Ada must not affect anybody else's lockout",
+  );
+});
+
+test('removing a result is owner-only and scoped to its own quiz', async () => {
+  const maker = await createMaker();
+  const quiz = await seedQuiz(maker.cookie);
+  const otherQuiz = await seedQuiz(maker.cookie);
+
+  const started = await (
+    await call('POST', `/api/quizzes/${quiz.id}/attempts`, { body: { participantName: 'Ada' } })
+  ).json();
+  const attemptId = started.attempt.attemptId;
+  await call('POST', `/api/attempts/${attemptId}/submit`, { body: {} });
+
+  assert.equal((await call('DELETE', `/api/quizzes/${quiz.id}/attempts/${attemptId}`)).status, 401);
+
+  const mallory = await createMaker();
+  assert.equal(
+    (await call('DELETE', `/api/quizzes/${quiz.id}/attempts/${attemptId}`, { cookie: mallory.cookie }))
+      .status,
+    404,
+  );
+
+  // An attempt belonging to a different quiz cannot be deleted through this one.
+  assert.equal(
+    (await call('DELETE', `/api/quizzes/${otherQuiz.id}/attempts/${attemptId}`, {
+      cookie: maker.cookie,
+    })).status,
+    404,
+  );
+
+  // Still there after all those refusals.
+  const board = await (
+    await call('GET', `/api/quizzes/${quiz.id}/results`, { cookie: maker.cookie })
+  ).json();
+  assert.equal(board.entries.length, 1);
+});
+
 test('signing out invalidates the session', async () => {
   const maker = await createMaker();
   assert.equal((await call('GET', '/api/quizzes', { cookie: maker.cookie })).status, 200);

@@ -36,6 +36,8 @@ export const api = {
   getShare: (quizId) => request('GET', `/api/quizzes/${quizId}/share`),
   getResults: (quizId) => request('GET', `/api/quizzes/${quizId}/results`),
   clearResults: (quizId) => request('DELETE', `/api/quizzes/${quizId}/results`),
+  deleteAttempt: (quizId, attemptId) =>
+    request('DELETE', `/api/quizzes/${quizId}/attempts/${attemptId}`),
 
   getIntro: (quizId) => request('GET', `/api/quizzes/${quizId}/intro`),
   startAttempt: (quizId, participantName) =>

@@ -17,6 +17,8 @@ const pageError = document.querySelector('#page-error');
 const body = document.querySelector('#leaderboard-body');
 const emptyState = document.querySelector('#leaderboard-empty');
 const autoRefresh = document.querySelector('#auto-refresh');
+const search = document.querySelector('#leaderboard-search');
+const searchSummary = document.querySelector('#search-summary');
 
 document.querySelector('#edit-link').href = `/quizzes/${quizId}`;
 document.querySelector('#csv-link').href = `/api/quizzes/${quizId}/results.csv`;
@@ -51,15 +53,34 @@ function renderStats({ quiz, stats }) {
   );
 }
 
-function renderLeaderboard(entries) {
+function renderLeaderboard(allEntries) {
   clear(body);
   clear(emptyState);
 
-  if (entries.length === 0) {
+  const term = search.value.trim().toLowerCase();
+  const entries = term
+    ? allEntries.filter((entry) => entry.participantName.toLowerCase().includes(term))
+    : allEntries;
+
+  searchSummary.textContent = term
+    ? `${entries.length} of ${allEntries.length} shown`
+    : '';
+
+  if (allEntries.length === 0) {
     emptyState.append(
       el('div', { class: 'empty-state' }, [
         el('h3', { text: 'No submissions yet' }),
         el('p', { text: 'Results appear here as soon as somebody finishes the quiz.' }),
+      ]),
+    );
+    return;
+  }
+
+  if (entries.length === 0) {
+    emptyState.append(
+      el('div', { class: 'empty-state' }, [
+        el('h3', { text: 'Nobody matches that search' }),
+        el('p', { text: `No participant name contains "${search.value.trim()}".` }),
       ]),
     );
     return;
@@ -90,9 +111,44 @@ function renderLeaderboard(entries) {
         el('td', { class: 'numeric', text: `${entry.correctCount}/${entry.questionCount}` }),
         el('td', { class: 'numeric', text: formatDuration(entry.durationMs) }),
         el('td', { class: 'meta', text: formatDateTime(entry.submittedAt) }),
+        el('td', {}, [
+          el('button', {
+            class: 'button button--danger button--small',
+            type: 'button',
+            text: '×',
+            title: `Remove ${entry.participantName}'s result so they can take the quiz again`,
+            'aria-label': `Remove ${entry.participantName}'s result`,
+            onClick: () => removeAttempt(entry),
+          }),
+        ]),
       ]),
     );
   });
+}
+
+/**
+ * Removing one result is how a single person is let back in: the one-attempt
+ * checks look for a submitted attempt, so deleting theirs frees them without
+ * affecting anybody else on the board.
+ */
+async function removeAttempt(entry) {
+  const confirmed = window.confirm(
+    [
+      `Remove ${entry.participantName}'s result?`,
+      '',
+      `Their score of ${entry.score}/${entry.maxScore} is deleted and cannot be recovered.`,
+      'They will be able to take the quiz again; nobody else is affected.',
+    ].join('\n'),
+  );
+  if (!confirmed) return;
+
+  try {
+    await api.deleteAttempt(quizId, entry.attemptId);
+    toast(`Removed ${entry.participantName} — they can retake it now`);
+    await refresh();
+  } catch (error) {
+    showError(pageError, error.message);
+  }
 }
 
 let latest = null;
@@ -207,6 +263,10 @@ function stopAutoRefresh() {
   clearInterval(refreshTimer);
   refreshTimer = null;
 }
+
+search.addEventListener('input', () => {
+  if (latest) renderLeaderboard(latest.entries);
+});
 
 autoRefresh.addEventListener('change', () => {
   if (autoRefresh.checked) startAutoRefresh();

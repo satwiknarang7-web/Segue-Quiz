@@ -187,6 +187,25 @@ export const quizService = {
     return { quizId: quiz.id, removed };
   },
 
+  /**
+   * Delete one attempt from a quiz's leaderboard.
+   *
+   * Both the one-attempt checks look for a *submitted* attempt, so removing
+   * somebody's record is also what lets that person - and only that person -
+   * take the quiz again.
+   */
+  removeAttempt(quizId, attemptId, ownerId) {
+    const quiz = requireOwnedQuiz(quizId, ownerId);
+    const attempt = attemptRepository.findById(attemptId);
+
+    // Checking the quiz matches stops an id from another quiz being deleted
+    // through a quiz this maker happens to own.
+    if (!attempt || attempt.quizId !== quiz.id) throw notFound('That attempt does not exist.');
+
+    attemptRepository.remove(attempt.id);
+    return { attemptId: attempt.id, participantName: attempt.participantName };
+  },
+
   remove(quizId, ownerId) {
     const quiz = requireOwnedQuiz(quizId, ownerId);
     attemptRepository.removeByQuiz(quiz.id);

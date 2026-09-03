@@ -216,19 +216,52 @@ document.querySelector('#previous-button').addEventListener('click', () => {
   }
 });
 
+/**
+ * Submitting is final, so it goes through a dialog rather than straight
+ * through. A browser confirm() was too easy to dismiss without reading, and
+ * could not name which questions were still blank.
+ */
+const submitDialog = document.querySelector('#submit-dialog');
+
 document.querySelector('#submit-button').addEventListener('click', () => {
   const total = state.quiz.questions.length;
   const answered = Object.keys(state.answers).length;
-  const message =
-    answered < total
-      ? `You have answered ${answered} of ${total} questions. Submit anyway?`
-      : 'Submit your answers?';
-  if (window.confirm(message)) submit({ automatic: false });
+
+  const blank = state.quiz.questions
+    .map((question, index) => (question.id in state.answers ? null : index + 1))
+    .filter((number) => number !== null);
+
+  document.querySelector('#submit-summary').textContent =
+    `You have answered ${answered} of ${total} question${total === 1 ? '' : 's'}.`;
+
+  const warning = document.querySelector('#submit-unanswered');
+  if (blank.length > 0) {
+    warning.textContent =
+      blank.length === 1
+        ? `Question ${blank[0]} is still blank and will score nothing.`
+        : `Questions ${blank.join(', ')} are still blank and will score nothing.`;
+    warning.hidden = false;
+  } else {
+    warning.hidden = true;
+  }
+
+  submitDialog.showModal();
+});
+
+document.querySelector('#submit-cancel').addEventListener('click', () => submitDialog.close());
+
+document.querySelector('#submit-confirm').addEventListener('click', () => {
+  submitDialog.close();
+  submit({ automatic: false });
 });
 
 async function submit({ automatic }) {
   if (state.submitting) return;
   state.submitting = true;
+
+  // The clock can run out while the confirmation is open; do not leave a
+  // dialog asking about a decision that has already been taken.
+  if (submitDialog.open) submitDialog.close();
   clearInterval(state.ticker);
   document.querySelector('#submit-button').disabled = true;
 
