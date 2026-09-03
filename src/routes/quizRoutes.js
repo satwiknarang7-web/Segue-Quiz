@@ -57,6 +57,16 @@ quizRoutes.post(
   maker,
 );
 
+/** Paste many questions at once. `dryRun` powers the preview. */
+quizRoutes.post(
+  '/api/quizzes/:quizId/questions/bulk',
+  ({ params, body, user }) =>
+    quizService.addQuestionsFromText(params.quizId, body?.text, user.id, {
+      dryRun: body?.dryRun === true,
+    }),
+  maker,
+);
+
 quizRoutes.put(
   '/api/quizzes/:quizId/questions/:questionId',
   ({ params, body, user }) => ({

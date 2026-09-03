@@ -47,6 +47,31 @@ deadline is stored with the attempt. That means:
   answered, and the recorded time is capped at the limit.
 - An attempt abandoned entirely is finalised the next time results are viewed.
 
+### Adding many questions at once
+
+**Paste many** in the editor takes a block of text, one question per line: the question
+first, then its options, with `*` in front of the correct one.
+
+```
+Capital of France?	Berlin	*Paris	Madrid	Rome
+Two plus two?	3	*4	5
+Water is wet	*True	False
+```
+
+Cells are separated by tabs or commas. Tabs are the default because that is exactly
+what copying a range out of Excel or Google Sheets produces, so a spreadsheet of
+questions pastes straight in. Commas work too, with `"quoted cells"` when a question
+contains one. Blank lines and `#` comments are skipped, and trailing empty columns are
+ignored.
+
+Marking the answer inline rather than in a fixed column is what lets one paste mix
+two-option and six-option questions.
+
+The preview underneath is a **dry run of the real import** - the same parsing and the
+same validation, saving nothing - so what it shows is what you get. Problems are listed
+against the line number in your paste, and **Import stays disabled until every line is
+good**: a half-imported quiz is harder to repair than one that never imported.
+
 ### Shuffling
 
 Two per-quiz settings, both off by default: **shuffle the question order** and
@@ -342,6 +367,7 @@ src/
     validate.js          Input coercion and bounds checking
     ids.js               Join codes and record ids
     network.js           LAN address detection
+    parseQuestions.js    Reads pasted TSV/CSV question blocks
     shuffle.js           Deterministic per-attempt question and option order
     totp.js              TOTP (RFC 6238) and base32, for two-factor sign in
   store/
@@ -413,6 +439,7 @@ Everything else is public.
 | `PATCH` | `/api/quizzes/:id` | Update settings | maker |
 | `DELETE` | `/api/quizzes/:id` | Delete a quiz and its attempts | maker |
 | `POST` | `/api/quizzes/:id/questions` | Add a question | maker |
+| `POST` | `/api/quizzes/:id/questions/bulk` | Add many from pasted text (`dryRun` previews) | maker |
 | `PUT` | `/api/quizzes/:id/questions/:questionId` | Update a question | maker |
 | `DELETE` | `/api/quizzes/:id/questions/:questionId` | Delete a question | maker |
 | `POST` | `/api/quizzes/:id/questions/:questionId/move` | Reorder a question | maker |

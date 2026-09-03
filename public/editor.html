@@ -116,6 +116,46 @@
         display: block;
       }
 
+      .bulk-example {
+        margin: 0;
+        padding: 10px 12px;
+        background: var(--bg-subtle);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        line-height: 1.7;
+        overflow-x: auto;
+        white-space: pre;
+        tab-size: 12;
+      }
+
+      #bulk-text {
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        tab-size: 12;
+      }
+
+      .bulk-row {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        font-size: 0.85rem;
+        padding: 3px 0;
+      }
+
+      .bulk-row__line {
+        font-family: var(--mono);
+        color: var(--text-faint);
+        font-size: 0.75rem;
+        flex: none;
+        min-width: 34px;
+      }
+
+      .bulk-row[data-bad="true"] {
+        color: var(--danger);
+      }
+
       .join-url {
         font-family: var(--mono);
         font-size: 0.8rem;
@@ -156,6 +196,9 @@
             <h2>Questions</h2>
             <span class="badge" id="question-count">0</span>
             <span class="spacer"></span>
+            <button class="button button--ghost button--small" type="button" id="bulk-add-button">
+              Paste many
+            </button>
             <button class="button button--small" type="button" id="add-question-button">
               Add question
             </button>
@@ -274,6 +317,41 @@
           <button class="button" type="submit" id="save-question">Save question</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="bulk-dialog" aria-labelledby="bulk-title">
+      <div class="dialog__body stack">
+        <h2 id="bulk-title">Paste many questions</h2>
+
+        <p class="meta">
+          One question per line. First the question, then the options, with
+          <strong>*</strong> in front of the correct one. Copying cells straight out of
+          Excel or Google Sheets already gives the right format.
+        </p>
+
+        <pre class="bulk-example">Capital of France?	Berlin	*Paris	Madrid	Rome
+Two plus two?	3	*4	5
+Water is wet	*True	False</pre>
+
+        <div class="field">
+          <label for="bulk-text">Your questions</label>
+          <textarea id="bulk-text" rows="8" spellcheck="false"
+            placeholder="Paste here, or type one question per line"></textarea>
+        </div>
+
+        <div class="stack stack--tight" id="bulk-preview" hidden>
+          <span class="label" id="bulk-preview-label"></span>
+          <div class="stack stack--tight" id="bulk-preview-list"></div>
+        </div>
+
+        <p class="notice notice--error" id="bulk-error" hidden></p>
+
+        <div class="row">
+          <span class="spacer"></span>
+          <button class="button button--ghost" type="button" id="bulk-cancel">Cancel</button>
+          <button class="button" type="button" id="bulk-import" disabled>Import</button>
+        </div>
+      </div>
     </dialog>
 
     <script type="module" src="/js/editor.js"></script>

@@ -176,6 +176,101 @@ async function renderShare() {
   };
 }
 
+/* ---- Bulk paste --------------------------------------------------------- */
+
+const bulkDialog = document.querySelector('#bulk-dialog');
+const bulkText = document.querySelector('#bulk-text');
+const bulkError = document.querySelector('#bulk-error');
+const bulkImport = document.querySelector('#bulk-import');
+const bulkPreview = document.querySelector('#bulk-preview');
+
+let previewTimer = null;
+
+document.querySelector('#bulk-add-button').addEventListener('click', () => {
+  bulkText.value = '';
+  bulkError.hidden = true;
+  bulkPreview.hidden = true;
+  bulkImport.disabled = true;
+  bulkDialog.showModal();
+  bulkText.focus();
+});
+
+document.querySelector('#bulk-cancel').addEventListener('click', () => bulkDialog.close());
+
+// The preview is a dry run of the real import, so what is shown here is
+// exactly what would be created - the parsing lives in one place only.
+bulkText.addEventListener('input', () => {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(refreshBulkPreview, 250);
+});
+
+async function refreshBulkPreview() {
+  const text = bulkText.value.trim();
+
+  if (text === '') {
+    bulkPreview.hidden = true;
+    bulkImport.disabled = true;
+    return;
+  }
+
+  try {
+    const { questions, errors } = await api.addQuestionsFromText(quizId, bulkText.value, true);
+
+    const label = document.querySelector('#bulk-preview-label');
+    label.textContent = errors.length
+      ? `${questions.length} ready, ${errors.length} line(s) to fix`
+      : `${questions.length} question${questions.length === 1 ? '' : 's'} ready to import`;
+
+    const list = clear(document.querySelector('#bulk-preview-list'));
+
+    for (const question of questions) {
+      list.append(
+        el('div', { class: 'bulk-row' }, [
+          el('span', { class: 'bulk-row__line', text: `L${question.line}` }),
+          el('span', {
+            text: `${question.text}  —  ${question.options.length} options, answer: ${
+              question.options[question.correctIndex]
+            }`,
+          }),
+        ]),
+      );
+    }
+
+    for (const problem of errors) {
+      list.append(
+        el('div', { class: 'bulk-row', dataset: { bad: 'true' } }, [
+          el('span', { class: 'bulk-row__line', text: `L${problem.line}` }),
+          el('span', { text: problem.message }),
+        ]),
+      );
+    }
+
+    bulkPreview.hidden = false;
+    bulkError.hidden = true;
+    // Refuse the import while anything is broken: a half-imported quiz is
+    // more annoying to repair than one that never imported.
+    bulkImport.disabled = errors.length > 0 || questions.length === 0;
+  } catch (error) {
+    showError(bulkError, error.message);
+    bulkImport.disabled = true;
+  }
+}
+
+bulkImport.addEventListener('click', async () => {
+  bulkImport.disabled = true;
+
+  try {
+    const { quiz: updated, added } = await api.addQuestionsFromText(quizId, bulkText.value, false);
+    quiz = updated;
+    render();
+    bulkDialog.close();
+    toast(`Added ${added} question${added === 1 ? '' : 's'}`);
+  } catch (error) {
+    showError(bulkError, error.message);
+    bulkImport.disabled = false;
+  }
+});
+
 /* ---- Question dialog ---------------------------------------------------- */
 
 function optionRow(value = '', isCorrect = false) {

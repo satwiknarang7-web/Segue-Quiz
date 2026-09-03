@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { createId, createJoinCode } from '../lib/ids.js';
 import { asArray, asBoolean, asInteger, asOptionalString, asString } from '../lib/validate.js';
+import { parseBulkQuestions } from '../lib/parseQuestions.js';
 import { optionOrder, questionOrder } from '../lib/shuffle.js';
 import { attemptRepository } from '../repositories/attemptRepository.js';
 import { quizRepository } from '../repositories/quizRepository.js';
@@ -157,6 +158,48 @@ export const quizService = {
       createdAt: now,
       updatedAt: now,
     });
+  },
+
+  /**
+   * Add many questions from one pasted block.
+   *
+   * All or nothing: if any line is bad the whole paste is refused, because a
+   * half-imported quiz is harder to repair than one that was never imported.
+   * `dryRun` runs exactly the same parse and validation but saves nothing,
+   * which is what the preview uses - so what you preview is what you get.
+   */
+  addQuestionsFromText(quizId, text, ownerId, { dryRun = false } = {}) {
+    const quiz = requireOwnedQuiz(quizId, ownerId);
+    const { questions, errors } = parseBulkQuestions(text);
+
+    // Run each one through the same validation a typed question gets, so the
+    // preview catches duplicate options and over-long text too.
+    const parsed = [];
+    for (const question of questions) {
+      try {
+        parsed.push({ line: question.line, ...parseQuestionPayload(question) });
+      } catch (error) {
+        errors.push({ line: question.line, message: error.message });
+      }
+    }
+
+    errors.sort((a, b) => a.line - b.line);
+
+    if (dryRun) return { questions: parsed, errors, added: 0 };
+
+    if (errors.length > 0) {
+      throw badRequest(
+        `${errors.length} line(s) could not be read. Fix them and paste again.`,
+        errors,
+      );
+    }
+    if (parsed.length === 0) throw badRequest('Nothing to import.');
+
+    let latest = quiz;
+    for (const question of parsed) {
+      latest = quizService.addQuestion(quiz.id, question, ownerId);
+    }
+    return { quiz: latest, questions: parsed, errors: [], added: parsed.length };
   },
 
   update(quizId, payload, ownerId) {
