@@ -10,6 +10,8 @@ const toRow = (quiz) => ({
   is_published: quiz.isPublished,
   allow_retakes: quiz.allowRetakes,
   end_on_leave: quiz.endOnLeave !== false,
+  shuffle_questions: Boolean(quiz.shuffleQuestions),
+  shuffle_options: Boolean(quiz.shuffleOptions),
   questions: quiz.questions ?? [],
   created_at: quiz.createdAt,
   updated_at: quiz.updatedAt,
@@ -25,12 +27,21 @@ const fromRow = (row) => ({
   isPublished: row.is_published,
   allowRetakes: row.allow_retakes,
   endOnLeave: row.end_on_leave,
+  shuffleQuestions: Boolean(row.shuffle_questions),
+  shuffleOptions: Boolean(row.shuffle_options),
   questions: row.questions ?? [],
   createdAt: new Date(row.created_at).toISOString(),
   updatedAt: new Date(row.updated_at).toISOString(),
 });
 
-const store = createStore({ file: 'quizzes.json', table: 'quizzes', toRow, fromRow });
+const store = createStore({
+  file: 'quizzes.json',
+  table: 'quizzes',
+  toRow,
+  fromRow,
+  // Added by supabase/migrations/0003_shuffle.sql.
+  requiredColumns: ['id', 'shuffle_questions', 'shuffle_options'],
+});
 
 export const quizRepository = {
   list() {

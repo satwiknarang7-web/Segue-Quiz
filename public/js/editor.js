@@ -147,6 +147,8 @@ function renderSettings() {
   document.querySelector('#setting-published').checked = quiz.isPublished;
   document.querySelector('#setting-retakes').checked = quiz.allowRetakes;
   document.querySelector('#setting-end-on-leave').checked = quiz.endOnLeave !== false;
+  document.querySelector('#setting-shuffle-questions').checked = Boolean(quiz.shuffleQuestions);
+  document.querySelector('#setting-shuffle-options').checked = Boolean(quiz.shuffleOptions);
 }
 
 async function renderShare() {
@@ -338,6 +340,8 @@ document.querySelector('#settings-form').addEventListener('submit', async (event
       isPublished: document.querySelector('#setting-published').checked,
       allowRetakes: document.querySelector('#setting-retakes').checked,
       endOnLeave: document.querySelector('#setting-end-on-leave').checked,
+      shuffleQuestions: document.querySelector('#setting-shuffle-questions').checked,
+      shuffleOptions: document.querySelector('#setting-shuffle-options').checked,
     });
     quiz = updated;
     render();

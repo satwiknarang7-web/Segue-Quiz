@@ -47,6 +47,33 @@ deadline is stored with the attempt. That means:
   answered, and the recorded time is capped at the limit.
 - An attempt abandoned entirely is finalised the next time results are viewed.
 
+### Shuffling
+
+Two per-quiz settings, both off by default: **shuffle the question order** and
+**shuffle the answer options**, each independently.
+
+The arrangement is derived from the attempt id rather than stored, which makes it
+stable for that attempt and different between attempts. Reloading, resuming after a
+dropped connection, or stepping back to an earlier question all show the same
+arrangement - anything else would leave saved answers pointing at the wrong option.
+
+Answers are recorded against the **authored** option order. The translation from
+"position N of what I was shown" happens on the way in, so scoring, the question
+breakdown, the CSV export and the answer key are all untouched by shuffling. That
+translation is the part worth being careful with: a mistake there marks people wrong
+silently, so the tests check a correct pick scores under shuffling, a wrong pick does
+not, and answers arriving with a bulk submission are translated the same way autosaves
+are.
+
+### Reviewing one person's answers
+
+**View** on any leaderboard row opens that participant's paper: every question, the
+option they chose, the option that was right, and the points awarded. Unanswered
+questions are marked as such rather than shown as wrong.
+
+The paper is shown in the authored order even when the attempt was shuffled, so every
+participant's review reads the same way for marking.
+
 ### One attempt per person
 
 With **Allow more than one attempt per person** off (the default), a quiz is refused a
@@ -315,6 +342,7 @@ src/
     validate.js          Input coercion and bounds checking
     ids.js               Join codes and record ids
     network.js           LAN address detection
+    shuffle.js           Deterministic per-attempt question and option order
     totp.js              TOTP (RFC 6238) and base32, for two-factor sign in
   store/
     index.js             Picks the backend: Supabase when configured, else JSON
@@ -392,6 +420,7 @@ Everything else is public.
 | `GET` | `/api/quizzes/:id/qr.svg` | QR code as SVG (`?size=`) | maker |
 | `GET` | `/api/quizzes/:id/qr.png` | QR code as PNG (`?scale=`) | maker |
 | `GET` | `/api/quizzes/:id/results` | Leaderboard, stats and per-question breakdown | maker |
+| `GET` | `/api/quizzes/:id/attempts/:attemptId` | One participant's answers, question by question | maker |
 | `DELETE` | `/api/quizzes/:id/attempts/:attemptId` | Remove one result, freeing that person | maker |
 | `DELETE` | `/api/quizzes/:id/results` | Clear every attempt, keeping the quiz | maker |
 | `GET` | `/api/quizzes/:id/results.csv` | Leaderboard as CSV | maker |

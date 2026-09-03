@@ -10,6 +10,70 @@
       href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23042b56'/><path d='M5 8h18l-3.2 4.4H5z' fill='%23878787'/><path d='M23.6 6.6h4.6L12.9 27h-4.6z' fill='%23ffffff'/></svg>"
     />
     <style>
+      .review-q {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 14px 16px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .review-q__head {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+      }
+
+      .review-q__verdict {
+        font-size: 0.78rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+
+      .review-q__verdict[data-state="correct"] {
+        background: var(--success-soft);
+        color: var(--success);
+      }
+
+      .review-q__verdict[data-state="wrong"] {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .review-q__verdict[data-state="blank"] {
+        background: var(--bg-subtle);
+        color: var(--text-faint);
+      }
+
+      .review-opt {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        padding: 4px 0;
+      }
+
+      .review-opt[data-correct="true"] {
+        color: var(--success);
+        font-weight: 600;
+      }
+
+      .review-opt[data-chosen="true"][data-correct="false"] {
+        color: var(--danger);
+        font-weight: 600;
+      }
+
+      .review-opt__tag {
+        font-size: 0.72rem;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+        padding: 0 6px;
+        white-space: nowrap;
+      }
+
       .breakdown {
         display: grid;
         gap: 14px;
@@ -149,6 +213,7 @@
                 <th class="numeric">Correct</th>
                 <th class="numeric">Time</th>
                 <th>Submitted</th>
+                <th style="width: 64px"><span class="sr-only">Review</span></th>
                 <th style="width: 44px"><span class="sr-only">Remove</span></th>
               </tr>
             </thead>
@@ -163,6 +228,20 @@
         <div class="breakdown" id="breakdown"></div>
       </section>
     </main>
+
+    <dialog id="review-dialog" aria-labelledby="review-title">
+      <div class="dialog__body stack">
+        <div class="row">
+          <h2 id="review-title">Answers</h2>
+          <span class="spacer"></span>
+          <button class="button button--ghost button--small" type="button" id="review-close">
+            Close
+          </button>
+        </div>
+        <p class="meta" id="review-summary"></p>
+        <div class="stack" id="review-questions"></div>
+      </div>
+    </dialog>
 
     <script type="module" src="/js/results.js"></script>
   </body>

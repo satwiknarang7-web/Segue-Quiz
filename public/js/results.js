@@ -113,6 +113,15 @@ function renderLeaderboard(allEntries) {
         el('td', { class: 'meta', text: formatDateTime(entry.submittedAt) }),
         el('td', {}, [
           el('button', {
+            class: 'button button--ghost button--small',
+            type: 'button',
+            text: 'View',
+            title: `See every answer ${entry.participantName} gave`,
+            onClick: () => openReview(entry),
+          }),
+        ]),
+        el('td', {}, [
+          el('button', {
             class: 'button button--danger button--small',
             type: 'button',
             text: '×',
@@ -124,6 +133,74 @@ function renderLeaderboard(allEntries) {
       ]),
     );
   });
+}
+
+const reviewDialog = document.querySelector('#review-dialog');
+document.querySelector('#review-close').addEventListener('click', () => reviewDialog.close());
+
+/** Open one participant's paper: every question, their pick, the right answer. */
+async function openReview(entry) {
+  try {
+    const paper = await api.getAttemptReview(quizId, entry.attemptId);
+
+    document.querySelector('#review-title').textContent = paper.participantName;
+    document.querySelector('#review-summary').textContent = [
+      `${paper.score}/${paper.maxScore} points`,
+      `${paper.correctCount} of ${paper.questions.length} correct`,
+      formatDuration(paper.durationMs),
+      paper.endedReason === 'left_quiz'
+        ? 'ended early - left the quiz'
+        : paper.endedReason === 'timed_out'
+          ? 'ran out of time'
+          : 'submitted',
+    ].join(' · ');
+
+    const container = clear(document.querySelector('#review-questions'));
+
+    paper.questions.forEach((question) => {
+      const state = question.chosenIndex === null ? 'blank' : question.isCorrect ? 'correct' : 'wrong';
+      const verdict = { correct: 'Correct', wrong: 'Wrong', blank: 'Not answered' }[state];
+
+      container.append(
+        el('div', { class: 'review-q' }, [
+          el('div', { class: 'review-q__head' }, [
+            el('span', { class: 'question__index meta', text: `Q${question.number}` }),
+            el('span', { class: 'breakdown__text', text: question.text }),
+            el('span', { class: 'review-q__verdict', dataset: { state }, text: verdict }),
+          ]),
+          ...question.options.map((option, index) =>
+            el(
+              'div',
+              {
+                class: 'review-opt',
+                dataset: {
+                  correct: String(index === question.correctIndex),
+                  chosen: String(index === question.chosenIndex),
+                },
+              },
+              [
+                el('span', { text: `${OPTION_LABELS[index]}. ${option}` }),
+                index === question.correctIndex
+                  ? el('span', { class: 'review-opt__tag', text: 'correct answer' })
+                  : null,
+                index === question.chosenIndex && index !== question.correctIndex
+                  ? el('span', { class: 'review-opt__tag', text: 'their answer' })
+                  : null,
+              ],
+            ),
+          ),
+          el('p', {
+            class: 'tie-note',
+            text: `${question.pointsAwarded} of ${question.points} point${question.points === 1 ? '' : 's'}`,
+          }),
+        ]),
+      );
+    });
+
+    reviewDialog.showModal();
+  } catch (error) {
+    showError(pageError, error.message);
+  }
 }
 
 /**

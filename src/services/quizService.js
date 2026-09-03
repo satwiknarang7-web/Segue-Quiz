@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { createId, createJoinCode } from '../lib/ids.js';
 import { asArray, asBoolean, asInteger, asOptionalString, asString } from '../lib/validate.js';
+import { optionOrder, questionOrder } from '../lib/shuffle.js';
 import { attemptRepository } from '../repositories/attemptRepository.js';
 import { quizRepository } from '../repositories/quizRepository.js';
 
@@ -71,6 +72,12 @@ function parseQuizSettings(payload = {}, { partial = false } = {}) {
   if (payload.endOnLeave !== undefined) {
     settings.endOnLeave = asBoolean(payload.endOnLeave, 'endOnLeave');
   }
+  if (payload.shuffleQuestions !== undefined) {
+    settings.shuffleQuestions = asBoolean(payload.shuffleQuestions, 'shuffleQuestions');
+  }
+  if (payload.shuffleOptions !== undefined) {
+    settings.shuffleOptions = asBoolean(payload.shuffleOptions, 'shuffleOptions');
+  }
 
   return settings;
 }
@@ -121,6 +128,8 @@ export const quizService = {
         isPublished: quiz.isPublished,
         allowRetakes: quiz.allowRetakes,
         endOnLeave: endsOnLeave(quiz),
+        shuffleQuestions: Boolean(quiz.shuffleQuestions),
+        shuffleOptions: Boolean(quiz.shuffleOptions),
         questionCount: quiz.questions.length,
         totalPoints: quizService.totalPoints(quiz),
         attemptCount: attemptRepository.listSubmittedByQuiz(quiz.id).length,
@@ -142,6 +151,8 @@ export const quizService = {
       isPublished: settings.isPublished ?? false,
       allowRetakes: settings.allowRetakes ?? false,
       endOnLeave: settings.endOnLeave ?? true,
+      shuffleQuestions: settings.shuffleQuestions ?? false,
+      shuffleOptions: settings.shuffleOptions ?? false,
       questions: [],
       createdAt: now,
       updatedAt: now,
@@ -264,7 +275,19 @@ export const quizService = {
   },
 
   /** The quiz as a participant may see it: no correct answers, no points give-away. */
-  toParticipantView(quiz) {
+  /**
+   * `attemptId` decides the shuffle. It is required whenever a quiz shuffles,
+   * because the order has to be reproducible for that one attempt - a refresh
+   * must not rearrange options underneath answers already saved.
+   */
+  toParticipantView(quiz, attemptId = null) {
+    const shuffleQuestions = Boolean(quiz.shuffleQuestions) && attemptId;
+    const shuffleOptions = Boolean(quiz.shuffleOptions) && attemptId;
+
+    const order = shuffleQuestions
+      ? questionOrder(attemptId, quiz.questions.length)
+      : quiz.questions.map((_, index) => index);
+
     return {
       id: quiz.id,
       title: quiz.title,
@@ -273,12 +296,19 @@ export const quizService = {
       endOnLeave: endsOnLeave(quiz),
       questionCount: quiz.questions.length,
       totalPoints: quizService.totalPoints(quiz),
-      questions: quiz.questions.map((question) => ({
-        id: question.id,
-        text: question.text,
-        options: question.options,
-        points: question.points,
-      })),
+      questions: order.map((questionIndex) => {
+        const question = quiz.questions[questionIndex];
+
+        // The participant sees options in their own order; the index they send
+        // back is translated to the answer key's order before anything is stored.
+        const options = shuffleOptions
+          ? optionOrder(attemptId, question.id, question.options.length).map(
+              (optionIndex) => question.options[optionIndex],
+            )
+          : question.options;
+
+        return { id: question.id, text: question.text, options, points: question.points };
+      }),
     };
   },
 };

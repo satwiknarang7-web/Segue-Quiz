@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { badRequest, conflict, gone, notFound } from '../lib/errors.js';
 import { createId } from '../lib/ids.js';
+import { toOriginalOption } from '../lib/shuffle.js';
 import { asInteger, asString } from '../lib/validate.js';
 import { attemptRepository } from '../repositories/attemptRepository.js';
 import { quizService } from './quizService.js';
@@ -30,7 +31,7 @@ function grade(quiz, answers) {
 }
 
 /** Only accept answers for questions that exist, with an in-range option. */
-function sanitiseAnswers(quiz, rawAnswers) {
+function sanitiseAnswers(quiz, rawAnswers, attemptId = null) {
   if (rawAnswers === undefined || rawAnswers === null) return {};
   if (typeof rawAnswers !== 'object' || Array.isArray(rawAnswers)) {
     throw badRequest('"answers" must be an object of questionId to option index.');
@@ -41,7 +42,9 @@ function sanitiseAnswers(quiz, rawAnswers) {
     if (value === null || value === undefined) continue;
     const question = quiz.questions.find((candidate) => candidate.id === questionId);
     if (!question) continue; // silently drop stale questions rather than failing a submission
-    answers[questionId] = asInteger(value, 'answer', { min: 0, max: question.options.length - 1 });
+    const displayed = asInteger(value, 'answer', { min: 0, max: question.options.length - 1 });
+    // Store against the answer key's order, never the order it was shown in.
+    answers[questionId] = toOriginalOption(quiz, attemptId, question, displayed);
   }
   return answers;
 }
@@ -127,7 +130,7 @@ export const attemptService = {
     if (running) {
       return {
         attempt: toAttemptState(running, quiz),
-        quiz: quizService.toParticipantView(quiz),
+        quiz: quizService.toParticipantView(quiz, running.id),
         resumed: true,
       };
     }
@@ -164,7 +167,10 @@ export const attemptService = {
       answeredCount: 0,
     });
 
-    return { attempt: toAttemptState(attempt, quiz), quiz: quizService.toParticipantView(quiz) };
+    return {
+      attempt: toAttemptState(attempt, quiz),
+      quiz: quizService.toParticipantView(quiz, attempt.id),
+    };
   },
 
   getState(attemptId) {
@@ -195,10 +201,13 @@ export const attemptService = {
     if (payload.optionIndex === null) {
       delete answers[questionId];
     } else {
-      answers[questionId] = asInteger(payload.optionIndex, 'optionIndex', {
+      const displayed = asInteger(payload.optionIndex, 'optionIndex', {
         min: 0,
         max: question.options.length - 1,
       });
+      // The participant clicked position N of what they were shown; translate
+      // it to the answer key's order so scoring never sees the shuffle.
+      answers[questionId] = toOriginalOption(quiz, attempt.id, question, displayed);
     }
 
     const updated = attemptRepository.update(attempt.id, (current) => ({ ...current, answers }));
@@ -216,7 +225,10 @@ export const attemptService = {
       return attemptService.toResult(attempt, quiz);
     }
 
-    const answers = { ...attempt.answers, ...sanitiseAnswers(quiz, payload.answers) };
+    // Answers already saved are in the answer key's order; the ones arriving
+    // with the submission are in the order this attempt was shown, so they
+    // need the same translation saveAnswer applies.
+    const answers = { ...attempt.answers, ...sanitiseAnswers(quiz, payload.answers, attempt.id) };
     const withAnswers = attemptRepository.update(attempt.id, (current) => ({ ...current, answers }));
 
     const deadlineMs = Date.parse(attempt.deadlineAt);

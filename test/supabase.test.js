@@ -32,6 +32,27 @@ const fake = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET') {
+    // A ?select=col,col probe checks the schema; answer it like Postgres would.
+    const select = url.searchParams.get('select') ?? '*';
+    if (select !== '*') {
+      const wanted = select.split(',');
+      const known = {
+        quizzes: ['id', 'owner_id', 'shuffle_questions', 'shuffle_options'],
+        attempts: ['id', 'device_id'],
+        users: ['id'],
+      }[table] ?? ['id'];
+      const missing = wanted.find((column) => !known.includes(column));
+
+      if (missing) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ message: `column ${table}.${missing} does not exist` }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+      return;
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(tables[table]));
     return;
@@ -136,6 +157,8 @@ test('a quiz is written as snake_case columns', async () => {
     'is_published',
     'owner_id',
     'questions',
+    'shuffle_options',
+    'shuffle_questions',
     'time_limit_seconds',
     'title',
     'updated_at',

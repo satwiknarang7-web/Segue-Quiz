@@ -1,3 +1,4 @@
+import { notFound } from '../lib/errors.js';
 import { attemptRepository } from '../repositories/attemptRepository.js';
 import { attemptService } from './attemptService.js';
 import { quizService } from './quizService.js';
@@ -72,6 +73,49 @@ export const leaderboardService = {
         topScore: entries.length ? entries[0].score : 0,
       },
       entries,
+    };
+  },
+
+  /**
+   * One participant's paper: every question, what they chose, what was right.
+   *
+   * Answers are stored against the authored option order, so this reads the
+   * quiz directly and never has to know whether the attempt was shuffled.
+   */
+  attemptReview(quizId, attemptId) {
+    const quiz = quizService.requireQuiz(quizId);
+    const attempt = attemptRepository.findById(attemptId);
+
+    if (!attempt || attempt.quizId !== quiz.id) throw notFound('That attempt does not exist.');
+
+    const questions = quiz.questions.map((question, index) => {
+      const chosen = attempt.answers[question.id];
+      const answered = chosen !== undefined && chosen !== null;
+
+      return {
+        number: index + 1,
+        questionId: question.id,
+        text: question.text,
+        options: question.options,
+        correctIndex: question.correctIndex,
+        chosenIndex: answered ? chosen : null,
+        isCorrect: answered && chosen === question.correctIndex,
+        points: question.points,
+        pointsAwarded: answered && chosen === question.correctIndex ? question.points : 0,
+      };
+    });
+
+    return {
+      attemptId: attempt.id,
+      participantName: attempt.participantName,
+      score: attempt.score,
+      maxScore: attempt.maxScore,
+      correctCount: attempt.correctCount,
+      answeredCount: attempt.answeredCount,
+      durationMs: attempt.durationMs,
+      endedReason: attempt.endedReason ?? (attempt.timedOut ? 'timed_out' : 'submitted'),
+      submittedAt: attempt.submittedAt,
+      questions,
     };
   },
 

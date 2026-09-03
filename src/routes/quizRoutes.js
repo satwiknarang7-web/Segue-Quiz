@@ -149,6 +149,16 @@ quizRoutes.get(
   maker,
 );
 
+/** One participant's paper: what they chose on every question. */
+quizRoutes.get(
+  '/api/quizzes/:quizId/attempts/:attemptId',
+  ({ params, user }) => {
+    quizService.requireOwnedQuiz(params.quizId, user.id);
+    return leaderboardService.attemptReview(params.quizId, params.attemptId);
+  },
+  maker,
+);
+
 /** Remove one person's result, letting just them take the quiz again. */
 quizRoutes.delete(
   '/api/quizzes/:quizId/attempts/:attemptId',
