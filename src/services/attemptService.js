@@ -78,6 +78,25 @@ function finalise(attempt, quiz, { at = Date.now(), reason = 'submitted' } = {})
   }));
 }
 
+/** A taker's own paper: their pick against the answer key, question by question. */
+function buildReview(quiz, attempt) {
+  return quiz.questions.map((question, index) => {
+    const chosen = attempt.answers[question.id];
+    const answered = chosen !== undefined && chosen !== null;
+
+    return {
+      number: index + 1,
+      text: question.text,
+      options: question.options,
+      correctIndex: question.correctIndex,
+      chosenIndex: answered ? chosen : null,
+      isCorrect: answered && chosen === question.correctIndex,
+      points: question.points,
+      pointsAwarded: answered && chosen === question.correctIndex ? question.points : 0,
+    };
+  });
+}
+
 /** Public shape of an attempt in progress - never leaks the answer key. */
 function toAttemptState(attempt, quiz) {
   const remainingMs = Math.max(0, Date.parse(attempt.deadlineAt) - Date.now());
@@ -276,6 +295,10 @@ export const attemptService = {
       timedOut: attempt.timedOut,
       endedReason: attempt.endedReason,
       submittedAt: attempt.submittedAt,
+      // Only present when the quiz reveals answers. Withheld from the payload
+      // entirely rather than hidden in the page, so a taker who opens the
+      // network tab learns nothing the quiz did not choose to tell them.
+      ...(quiz.revealAnswers ? { review: buildReview(quiz, attempt) } : {}),
     };
   },
 };

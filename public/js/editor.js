@@ -149,6 +149,7 @@ function renderSettings() {
   document.querySelector('#setting-end-on-leave').checked = quiz.endOnLeave !== false;
   document.querySelector('#setting-shuffle-questions').checked = Boolean(quiz.shuffleQuestions);
   document.querySelector('#setting-shuffle-options').checked = Boolean(quiz.shuffleOptions);
+  document.querySelector('#setting-reveal-answers').checked = Boolean(quiz.revealAnswers);
 }
 
 async function renderShare() {
@@ -437,6 +438,7 @@ document.querySelector('#settings-form').addEventListener('submit', async (event
       endOnLeave: document.querySelector('#setting-end-on-leave').checked,
       shuffleQuestions: document.querySelector('#setting-shuffle-questions').checked,
       shuffleOptions: document.querySelector('#setting-shuffle-options').checked,
+      revealAnswers: document.querySelector('#setting-reveal-answers').checked,
     });
     quiz = updated;
     render();

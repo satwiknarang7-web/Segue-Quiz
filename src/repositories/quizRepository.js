@@ -12,6 +12,7 @@ const toRow = (quiz) => ({
   end_on_leave: quiz.endOnLeave !== false,
   shuffle_questions: Boolean(quiz.shuffleQuestions),
   shuffle_options: Boolean(quiz.shuffleOptions),
+  reveal_answers: Boolean(quiz.revealAnswers),
   questions: quiz.questions ?? [],
   created_at: quiz.createdAt,
   updated_at: quiz.updatedAt,
@@ -29,6 +30,7 @@ const fromRow = (row) => ({
   endOnLeave: row.end_on_leave,
   shuffleQuestions: Boolean(row.shuffle_questions),
   shuffleOptions: Boolean(row.shuffle_options),
+  revealAnswers: Boolean(row.reveal_answers),
   questions: row.questions ?? [],
   createdAt: new Date(row.created_at).toISOString(),
   updatedAt: new Date(row.updated_at).toISOString(),
@@ -40,7 +42,7 @@ const store = createStore({
   toRow,
   fromRow,
   // Added by supabase/migrations/0003_shuffle.sql.
-  requiredColumns: ['id', 'shuffle_questions', 'shuffle_options'],
+  requiredColumns: ['id', 'shuffle_questions', 'shuffle_options', 'reveal_answers'],
 });
 
 export const quizRepository = {

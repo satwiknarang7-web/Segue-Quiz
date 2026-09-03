@@ -79,6 +79,9 @@ function parseQuizSettings(payload = {}, { partial = false } = {}) {
   if (payload.shuffleOptions !== undefined) {
     settings.shuffleOptions = asBoolean(payload.shuffleOptions, 'shuffleOptions');
   }
+  if (payload.revealAnswers !== undefined) {
+    settings.revealAnswers = asBoolean(payload.revealAnswers, 'revealAnswers');
+  }
 
   return settings;
 }
@@ -131,6 +134,7 @@ export const quizService = {
         endOnLeave: endsOnLeave(quiz),
         shuffleQuestions: Boolean(quiz.shuffleQuestions),
         shuffleOptions: Boolean(quiz.shuffleOptions),
+        revealAnswers: Boolean(quiz.revealAnswers),
         questionCount: quiz.questions.length,
         totalPoints: quizService.totalPoints(quiz),
         attemptCount: attemptRepository.listSubmittedByQuiz(quiz.id).length,
@@ -154,6 +158,7 @@ export const quizService = {
       endOnLeave: settings.endOnLeave ?? true,
       shuffleQuestions: settings.shuffleQuestions ?? false,
       shuffleOptions: settings.shuffleOptions ?? false,
+      revealAnswers: settings.revealAnswers ?? false,
       questions: [],
       createdAt: now,
       updatedAt: now,

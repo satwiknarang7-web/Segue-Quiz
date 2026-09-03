@@ -72,6 +72,20 @@ same validation, saving nothing - so what it shows is what you get. Problems are
 against the line number in your paste, and **Import stays disabled until every line is
 good**: a half-imported quiz is harder to repair than one that never imported.
 
+### Showing takers their answers
+
+Off by default. With **Show takers the answers when they submit** on, the result screen
+lists every question with their pick, the right one, and the points awarded; unanswered
+questions read as blank rather than wrong.
+
+It is off by default deliberately. When people sit the same quiz at different times,
+handing the answers to whoever finishes first undoes the shuffling and the one-attempt
+rule in one step. With it off, takers still see their own score - they just do not see
+which questions carried it.
+
+The answer key is **withheld from the response entirely** rather than hidden in the
+page, so opening the network tab reveals nothing the quiz did not choose to share.
+
 ### Shuffling
 
 Two per-quiz settings, both off by default: **shuffle the question order** and

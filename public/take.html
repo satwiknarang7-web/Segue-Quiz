@@ -14,7 +14,23 @@
         max-width: 660px;
       }
 
+      /* The countdown has to stay in view: on a long question with six options
+         it used to scroll away exactly when it mattered most. It sits below
+         the sticky site header rather than under it. */
+      .timer-card {
+        position: sticky;
+        top: 64px;
+        z-index: 5;
+      }
+
+      @media (max-width: 560px) {
+        .timer-card {
+          top: 56px;
+        }
+      }
+
       .timer-bar {
+        background: var(--bg-elevated);
         position: sticky;
         top: 64px;
         z-index: 5;
@@ -162,6 +178,43 @@
         color: var(--warning);
       }
 
+      .review-q {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 12px 14px;
+        display: grid;
+        gap: 6px;
+        text-align: left;
+      }
+
+      .review-q__head {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+      }
+
+      .review-q__verdict {
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+        margin-left: auto;
+      }
+
+      .review-q__verdict[data-state="correct"] { background: var(--success-soft); color: var(--success); }
+      .review-q__verdict[data-state="wrong"] { background: var(--danger-soft); color: var(--danger); }
+      .review-q__verdict[data-state="blank"] { background: var(--bg-subtle); color: var(--text-faint); }
+
+      .review-opt {
+        font-size: 0.86rem;
+        color: var(--text-muted);
+        padding: 2px 0;
+      }
+
+      .review-opt[data-correct="true"] { color: var(--success); font-weight: 600; }
+      .review-opt[data-chosen="true"][data-correct="false"] { color: var(--danger); font-weight: 600; }
+
       .score-hero__value {
         font-size: 3rem;
         font-weight: 800;
@@ -222,7 +275,7 @@
 
       <!-- Step 2: answer -->
       <section id="quiz-view" hidden>
-        <div class="timer-bar">
+        <div class="timer-bar timer-card">
           <span class="timer" id="timer">--:--</span>
           <div class="progress"><div class="progress__fill" id="progress-fill"></div></div>
           <span class="meta numeric" id="progress-label"></span>
@@ -259,6 +312,10 @@
           <span class="meta" id="result-detail"></span>
         </div>
         <p class="notice notice--info" id="result-note" hidden></p>
+          <p class="notice notice--info" id="result-locked" hidden>
+            Your answers are recorded. The quiz host decides when to share which
+            questions you got right.
+          </p>
         <div class="stat-grid">
           <div class="stat">
             <div class="stat__value" id="result-correct"></div>
@@ -273,6 +330,11 @@
             <div class="stat__label">Score</div>
           </div>
         </div>
+        <div class="stack stack--tight" id="result-review" hidden>
+          <span class="label">Your answers</span>
+          <div class="stack stack--tight" id="result-review-list"></div>
+        </div>
+
         <p class="meta" style="text-align: center">
           Your answers are in. Results are with the quiz host.
         </p>

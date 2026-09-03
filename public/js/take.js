@@ -158,8 +158,15 @@ function renderQuestion() {
     );
   });
 
+  const onLastQuestion = state.index === total - 1;
   document.querySelector('#previous-button').disabled = state.index === 0;
-  document.querySelector('#next-button').disabled = state.index === total - 1;
+  document.querySelector('#next-button').disabled = onLastQuestion;
+
+  // Submit sits next to Next the whole way through, so give it the weight of
+  // the primary action only once there is nothing left to answer. Before that
+  // it is still reachable, just not the thing the eye lands on.
+  const submitButton = document.querySelector('#submit-button');
+  submitButton.className = onLastQuestion ? 'button' : 'button button--ghost';
 
   renderNavigator();
 }
@@ -275,6 +282,58 @@ async function submit({ automatic }) {
   }
 }
 
+/**
+ * Shows the taker their own paper, but only when the quiz reveals answers.
+ * The server withholds `review` entirely otherwise, so there is nothing to
+ * find in the response either way.
+ */
+function renderOwnReview(result) {
+  const section = document.querySelector('#result-review');
+  const locked = document.querySelector('#result-locked');
+
+  if (!Array.isArray(result.review)) {
+    section.hidden = true;
+    locked.hidden = false;
+    return;
+  }
+
+  locked.hidden = true;
+  const list = clear(document.querySelector('#result-review-list'));
+
+  for (const question of result.review) {
+    const state = question.chosenIndex === null ? 'blank' : question.isCorrect ? 'correct' : 'wrong';
+    const verdict = { correct: 'Correct', wrong: 'Wrong', blank: 'Not answered' }[state];
+
+    list.append(
+      el('div', { class: 'review-q' }, [
+        el('div', { class: 'review-q__head' }, [
+          el('span', { class: 'meta', text: `Q${question.number}` }),
+          el('span', { text: question.text }),
+          el('span', { class: 'review-q__verdict', dataset: { state }, text: verdict }),
+        ]),
+        ...question.options.map((option, index) =>
+          el('div', {
+            class: 'review-opt',
+            dataset: {
+              correct: String(index === question.correctIndex),
+              chosen: String(index === question.chosenIndex),
+            },
+            text: [
+              `${OPTION_LABELS[index]}. ${option}`,
+              index === question.correctIndex ? '  (correct answer)' : '',
+              index === question.chosenIndex && index !== question.correctIndex
+                ? '  (your answer)'
+                : '',
+            ].join(''),
+          }),
+        ),
+      ]),
+    );
+  }
+
+  section.hidden = false;
+}
+
 /* ---- Leaving the quiz ---------------------------------------------------- */
 
 /**
@@ -338,6 +397,8 @@ function renderResult(result, automatic) {
   document.querySelector('#result-time').textContent = formatDuration(result.durationMs);
   document.querySelector('#result-percent').textContent =
     `${result.maxScore ? Math.round((result.score / result.maxScore) * 100) : 0}%`;
+
+  renderOwnReview(result);
 
   const note = document.querySelector('#result-note');
   if (result.endedReason === 'left_quiz') {

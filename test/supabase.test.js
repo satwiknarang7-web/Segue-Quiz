@@ -37,7 +37,7 @@ const fake = http.createServer(async (req, res) => {
     if (select !== '*') {
       const wanted = select.split(',');
       const known = {
-        quizzes: ['id', 'owner_id', 'shuffle_questions', 'shuffle_options'],
+        quizzes: ['id', 'owner_id', 'shuffle_questions', 'shuffle_options', 'reveal_answers'],
         attempts: ['id', 'device_id'],
         users: ['id'],
       }[table] ?? ['id'];
@@ -157,6 +157,7 @@ test('a quiz is written as snake_case columns', async () => {
     'is_published',
     'owner_id',
     'questions',
+    'reveal_answers',
     'shuffle_options',
     'shuffle_questions',
     'time_limit_seconds',
