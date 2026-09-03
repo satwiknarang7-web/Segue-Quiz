@@ -1,5 +1,4 @@
 import { buildJoinUrl } from '../config.js';
-import { AI_QUIZ, AI_QUIZ_QUESTIONS } from '../data/aiQuiz.js';
 import { send, sendNoContent } from '../lib/http.js';
 import { renderQrPng, renderQrSvg } from '../lib/qrcode.js';
 import { Router } from '../lib/router.js';
@@ -46,23 +45,6 @@ quizRoutes.delete(
   ({ params, res, user }) => {
     quizService.remove(params.quizId, user.id);
     sendNoContent(res);
-  },
-  maker,
-);
-
-/**
- * One-click import of the bundled SegueIT AI Quiz, created under whoever is
- * signed in. Saves a new maker staring at an empty dashboard, and means the
- * quiz can be added without anyone handing over their password to a script.
- */
-quizRoutes.post(
-  '/api/quizzes/import/ai-quiz',
-  ({ user }) => {
-    const quiz = quizService.createWithQuestions(
-      { quiz: AI_QUIZ, questions: AI_QUIZ_QUESTIONS },
-      user.id,
-    );
-    return { quiz, joinUrl: buildJoinUrl(quiz.id) };
   },
   maker,
 );

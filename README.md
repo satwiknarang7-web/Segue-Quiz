@@ -322,13 +322,11 @@ src/
     supabaseStore.js     Same surface, backed by a Supabase table
     postgrest.js         Minimal PostgREST client over fetch
   repositories/          Data access for quizzes, attempts and users
-  data/aiQuiz.js         The bundled SegueIT AI Quiz, shared by import paths
   services/              Domain rules: accounts, authoring, attempts, leaderboard
   routes/                Route definitions grouped by area
 public/                  Landing, auth, reset, dashboard, editor, take, results
   css/                   app.css (shared), landing.css, auth.css
   img/                   SegueIT logo, light and dark tints
-scripts/                 One-off importers
 supabase/migrations/     SQL schema to run against your project
 test/                    Node's built-in test runner
 data/                    Runtime data (git-ignored)
@@ -383,7 +381,6 @@ Everything else is public.
 | `POST` | `/api/auth/signout` | Sign out | |
 | `GET` | `/api/quizzes` | List quizzes with counts | maker |
 | `POST` | `/api/quizzes` | Create a quiz | maker |
-| `POST` | `/api/quizzes/import/ai-quiz` | Import the bundled AI quiz | maker |
 | `GET` | `/api/quizzes/:id` | Full quiz, including the answer key | maker |
 | `PATCH` | `/api/quizzes/:id` | Update settings | maker |
 | `DELETE` | `/api/quizzes/:id` | Delete a quiz and its attempts | maker |
@@ -406,31 +403,6 @@ Everything else is public.
 | `POST` | `/api/attempts/:id/abandon` | End an attempt because the taker left |  |
 
 Participant-facing endpoints never include `correctIndex`; scoring happens on the server.
-
-## Importing a quiz
-
-The **SegueIT AI Quiz** — 15 questions on agentic AI, RAG, LLMs and automation — is
-bundled in `src/data/aiQuiz.js`.
-
-The easy way: sign in, and press **Add the SegueIT AI Quiz** on an empty dashboard. It
-is created as a draft under your account so you can check the answer key before opening
-it.
-
-The same thing from a terminal, for scripting:
-
-```bash
-SEGUEQUIZ_URL=https://your-app.onrender.com SEGUEQUIZ_EMAIL=you@example.com SEGUEQUIZ_PASSWORD='your password' SEGUEQUIZ_TOTP=123456 node scripts/import-ai-quiz.mjs
-```
-
-`SEGUEQUIZ_TOTP` is the six digits your authenticator is showing at that moment, so
-run it straight after reading them. The quiz is created under that maker's account.
-
-Google does not publish a form's answer key, so the `correctIndex` values in that
-script were derived from the subject matter rather than copied from the form. Check
-them against your own key before running the quiz for real.
-
-The Google Form also collected Email, Full Name and Roll Number. SegueQuiz identifies
-participants by a single name field, so those extra fields are not carried over.
 
 ## Limitations worth knowing
 
