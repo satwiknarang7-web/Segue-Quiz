@@ -1,4 +1,6 @@
 import { buildJoinUrl } from '../config.js';
+import { generateQuestions, isConfigured, toPasteFormat } from '../lib/gemini.js';
+import { HttpError, badRequest } from '../lib/errors.js';
 import { send, sendNoContent } from '../lib/http.js';
 import { renderQrPng, renderQrSvg } from '../lib/qrcode.js';
 import { Router } from '../lib/router.js';
@@ -54,6 +56,48 @@ quizRoutes.delete(
 quizRoutes.post(
   '/api/quizzes/:quizId/questions',
   ({ params, body, user }) => ({ quiz: quizService.addQuestion(params.quizId, body, user.id) }),
+  maker,
+);
+
+/** Whether the editor should offer question generation at all. */
+quizRoutes.get('/api/ai/status', () => ({ available: isConfigured() }), maker);
+
+/**
+ * Draft questions from a topic.
+ *
+ * Deliberately returns text for the paste box rather than writing questions
+ * straight into the quiz: a model can be confidently wrong, and the person
+ * running the quiz is the one who has to answer for it. The draft goes through
+ * the same preview and the same validation as a spreadsheet paste.
+ */
+quizRoutes.post(
+  '/api/quizzes/:quizId/questions/generate',
+  async ({ params, body, user }) => {
+    quizService.requireOwnedQuiz(params.quizId, user.id);
+
+    const topic = String(body?.topic ?? '').trim();
+    if (topic.length < 3) throw badRequest('Describe what the quiz should be about.');
+    if (topic.length > 2000) throw badRequest('That topic is too long; summarise it.');
+
+    assertGenerationAllowed(user.id);
+
+    let questions;
+    try {
+      questions = await generateQuestions({
+        topic,
+        count: body?.count,
+        difficulty: String(body?.difficulty ?? '').slice(0, 40),
+        notes: String(body?.notes ?? '').slice(0, 1000),
+      });
+    } catch (error) {
+      // The client library explains what actually went wrong - a missing key,
+      // a rejected key, a rate limit. Left unwrapped these become a generic
+      // 500 and the teacher is told nothing useful.
+      throw new HttpError(isConfigured() ? 502 : 503, error.message);
+    }
+
+    return { text: toPasteFormat(questions), count: questions.length };
+  },
   maker,
 );
 
@@ -194,6 +238,28 @@ quizRoutes.get('/api/quizzes/:quizId/results.csv', ({ params, res, user }) => {
     'Cache-Control': 'no-store',
   });
 }, maker);
+
+/**
+ * Generation costs money on somebody's API key, and anybody can register a
+ * maker account, so it is capped per account per hour.
+ */
+const GENERATIONS_PER_HOUR = 20;
+const generationLog = new Map();
+
+function assertGenerationAllowed(userId) {
+  const now = Date.now();
+  const recent = (generationLog.get(userId) ?? []).filter((at) => now - at < 60 * 60 * 1000);
+
+  if (recent.length >= GENERATIONS_PER_HOUR) {
+    throw new HttpError(
+      429,
+      `That is ${GENERATIONS_PER_HOUR} generations this hour, which is the limit. Try again later.`,
+    );
+  }
+
+  recent.push(now);
+  generationLog.set(userId, recent);
+}
 
 function clamp(value, min, max) {
   if (!Number.isFinite(value)) return min;

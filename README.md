@@ -86,6 +86,32 @@ which questions carried it.
 The answer key is **withheld from the response entirely** rather than hidden in the
 page, so opening the network tab reveals nothing the quiz did not choose to share.
 
+### Drafting questions with Gemini
+
+Optional, and off unless `GEMINI_API_KEY` is set - the panel does not appear at all
+without one, so nobody is offered a button that cannot work.
+
+Describe the topic, pick how many questions and a difficulty, and the draft lands **in
+the paste box, not in the quiz**. That is deliberate: a model can be confidently wrong,
+and the person running the quiz is the one who has to answer for it. The draft goes
+through the same preview, the same validation and the same Import button as a
+spreadsheet paste, so editing or deleting a bad question is the normal flow rather than
+an afterthought.
+
+Details worth knowing:
+
+- Gemini is asked for **structured JSON against a schema**, not prose, because parsing a
+  model's free text is the part that breaks quietly.
+- Anything malformed is dropped rather than half-built into a question, and the reasons
+  a teacher would actually hit - no key, rejected key, rate limited, unreachable - each
+  say what they are instead of "something went wrong".
+- Tabs in generated text are stripped, so a draft can never break the row it sits in.
+- Generation is capped at **20 per account per hour**. It spends money on somebody's API
+  key and anyone can register a maker account.
+- `GEMINI_MODEL` overrides the model, which defaults to `gemini-3.8-flash`.
+
+The key is read on the server and never reaches a browser.
+
 ### Shuffling
 
 Two per-quiz settings, both off by default: **shuffle the question order** and
@@ -358,6 +384,8 @@ All optional, set as environment variables:
 | `SEGUEQUIZ_DATA_DIR` | `./data` | Where JSON data and server secrets live. |
 | `SUPABASE_URL` | unset | Supabase project URL. Set with the key below to use Postgres. |
 | `SUPABASE_SERVICE_ROLE_KEY` | unset | Supabase service_role key. Server-side only. |
+| `GEMINI_API_KEY` | unset | Enables drafting questions from a topic. Server-side only. |
+| `GEMINI_MODEL` | `gemini-3.8-flash` | Which Gemini model drafts the questions. |
 
 If the QR code points somewhere a phone cannot reach, that is what `PUBLIC_BASE_URL`
 is for:
@@ -381,6 +409,7 @@ src/
     validate.js          Input coercion and bounds checking
     ids.js               Join codes and record ids
     network.js           LAN address detection
+    gemini.js            Drafts questions from a topic, over plain fetch
     parseQuestions.js    Reads pasted TSV/CSV question blocks
     shuffle.js           Deterministic per-attempt question and option order
     totp.js              TOTP (RFC 6238) and base32, for two-factor sign in
@@ -454,6 +483,8 @@ Everything else is public.
 | `DELETE` | `/api/quizzes/:id` | Delete a quiz and its attempts | maker |
 | `POST` | `/api/quizzes/:id/questions` | Add a question | maker |
 | `POST` | `/api/quizzes/:id/questions/bulk` | Add many from pasted text (`dryRun` previews) | maker |
+| `GET` | `/api/ai/status` | Whether question drafting is configured | maker |
+| `POST` | `/api/quizzes/:id/questions/generate` | Draft questions from a topic | maker |
 | `PUT` | `/api/quizzes/:id/questions/:questionId` | Update a question | maker |
 | `DELETE` | `/api/quizzes/:id/questions/:questionId` | Delete a question | maker |
 | `POST` | `/api/quizzes/:id/questions/:questionId/move` | Reorder a question | maker |

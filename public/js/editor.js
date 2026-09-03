@@ -187,11 +187,62 @@ const bulkPreview = document.querySelector('#bulk-preview');
 
 let previewTimer = null;
 
+// The panel only appears when the server has a key, so a maker is never
+// offered a button that cannot work.
+async function showAiPanelIfAvailable() {
+  try {
+    const { available } = await api.aiStatus();
+    document.querySelector('#ai-panel').hidden = !available;
+  } catch {
+    document.querySelector('#ai-panel').hidden = true;
+  }
+}
+
+document.querySelector('#ai-generate').addEventListener('click', async () => {
+  const button = document.querySelector('#ai-generate');
+  const aiError = document.querySelector('#ai-error');
+  const topic = document.querySelector('#ai-topic').value.trim();
+
+  aiError.hidden = true;
+
+  if (topic.length < 3) {
+    showError(aiError, 'Say what the quiz should be about first.');
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = 'Drafting…';
+
+  try {
+    const { text, count } = await api.generateQuestions(quizId, {
+      topic,
+      count: Number(document.querySelector('#ai-count').value) || 10,
+      difficulty: document.querySelector('#ai-difficulty').value,
+    });
+
+    // Straight into the review box, never straight into the quiz.
+    const box = document.querySelector('#bulk-text');
+    box.value = box.value.trim() ? [box.value.trim(), text].join('\n') : text;
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+
+    toast(`Drafted ${count} question${count === 1 ? '' : 's'} — check them before importing`);
+  } catch (error) {
+    showError(aiError, error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Draft questions';
+  }
+});
+
 document.querySelector('#bulk-add-button').addEventListener('click', () => {
   bulkText.value = '';
   bulkError.hidden = true;
   bulkPreview.hidden = true;
   bulkImport.disabled = true;
+  document.querySelector('#ai-topic').value = '';
+  document.querySelector('#ai-error').hidden = true;
+  showAiPanelIfAvailable();
+
   bulkDialog.showModal();
   bulkText.focus();
 });

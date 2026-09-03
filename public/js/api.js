@@ -25,6 +25,9 @@ export const api = {
   deleteQuiz: (quizId) => request('DELETE', `/api/quizzes/${quizId}`),
 
   addQuestion: (quizId, payload) => request('POST', `/api/quizzes/${quizId}/questions`, payload),
+  aiStatus: () => request('GET', '/api/ai/status'),
+  generateQuestions: (quizId, payload) =>
+    request('POST', `/api/quizzes/${quizId}/questions/generate`, payload),
   addQuestionsFromText: (quizId, text, dryRun = false) =>
     request('POST', `/api/quizzes/${quizId}/questions/bulk`, { text, dryRun }),
   updateQuestion: (quizId, questionId, payload) =>

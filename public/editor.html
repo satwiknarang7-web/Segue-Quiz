@@ -116,6 +116,19 @@
         display: block;
       }
 
+      .ai-panel {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 12px 14px;
+        background: var(--bg-subtle);
+      }
+
+      .ai-panel summary {
+        cursor: pointer;
+        font-weight: 650;
+        font-size: 0.9rem;
+      }
+
       .bulk-example {
         margin: 0;
         padding: 10px 12px;
@@ -337,6 +350,47 @@
           <strong>*</strong> in front of the correct one. Copying cells straight out of
           Excel or Google Sheets already gives the right format.
         </p>
+
+        <details class="ai-panel" id="ai-panel" hidden>
+          <summary>Draft them with Gemini instead</summary>
+
+          <div class="stack stack--tight" style="margin-top: 12px">
+            <div class="field">
+              <label for="ai-topic">What is the quiz about?</label>
+              <textarea id="ai-topic" rows="3" maxlength="2000"
+                placeholder="e.g. Photosynthesis for GCSE biology - light and dark reactions, limiting factors"></textarea>
+            </div>
+
+            <div class="row">
+              <div class="field" style="flex: 0 0 110px">
+                <label for="ai-count">How many</label>
+                <input id="ai-count" type="number" min="1" max="25" value="10" />
+              </div>
+              <div class="field" style="flex: 1">
+                <label for="ai-difficulty">Difficulty</label>
+                <select id="ai-difficulty">
+                  <option value="">Not specified</option>
+                  <option value="easy">Easy</option>
+                  <option value="moderate" selected>Moderate</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </div>
+            </div>
+
+            <p class="notice notice--warning">
+              <strong>Check every question before you use it.</strong> A model can be
+              confidently wrong, and the draft lands in the box below so you can fix or
+              delete anything that is off. Nothing is added to your quiz until you press
+              Import.
+            </p>
+
+            <p class="notice notice--error" id="ai-error" hidden></p>
+
+            <button class="button button--ghost" type="button" id="ai-generate">
+              Draft questions
+            </button>
+          </div>
+        </details>
 
         <pre class="bulk-example">Capital of France?	Berlin	*Paris	Madrid	Rome
 Two plus two?	3	*4	5
