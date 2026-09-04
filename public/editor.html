@@ -85,6 +85,11 @@
       .type-switch {
         display: flex;
         gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .type-switch label {
+        min-width: 150px;
       }
 
       .type-switch label {
@@ -404,8 +409,18 @@
                 <input type="radio" name="question-type" value="short" />
                 <span>Type an answer</span>
               </label>
+              <label>
+                <input type="radio" name="question-type" value="draw" />
+                <span>Draw an answer</span>
+              </label>
             </div>
           </div>
+
+          <p class="notice" id="draw-note" hidden>
+            A drawing cannot be marked by the computer, so this question has no answer
+            key. Takers get a sketch pad, and their drawings wait for you on the
+            <strong>Marking</strong> screen until you award the points.
+          </p>
 
           <div class="field" id="choice-fields">
             <span class="label">Answer options <span class="field__hint">(select the correct one)</span></span>

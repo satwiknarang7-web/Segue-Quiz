@@ -47,6 +47,50 @@
         color: var(--text-faint);
       }
 
+      .review-q__verdict[data-state="pending"] {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      /* ---- Marking ---- */
+
+      .mark-item {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 14px 16px;
+        display: grid;
+        gap: 10px;
+        background: var(--bg-elevated);
+      }
+
+      .mark-item[data-marked="true"] {
+        opacity: 0.72;
+      }
+
+      .mark-drawing {
+        width: 100%;
+        max-width: 460px;
+        aspect-ratio: 10 / 7;
+        object-fit: contain;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: #fff;
+      }
+
+      .mark-points {
+        width: 84px;
+      }
+
+      .mark-suggestion {
+        border-left: 3px solid var(--accent);
+        padding: 8px 12px;
+        background: var(--bg-subtle);
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        font-size: 0.88rem;
+        display: grid;
+        gap: 6px;
+      }
+
       .review-opt {
         display: flex;
         gap: 8px;
@@ -243,6 +287,26 @@
           </table>
         </div>
         <div id="leaderboard-empty"></div>
+      </section>
+
+      <section class="card stack" id="marking-section" hidden>
+        <div class="card__header">
+          <h2>Marking</h2>
+          <span class="badge" id="marking-remaining"></span>
+          <span class="spacer"></span>
+          <label class="switch">
+            <input type="checkbox" id="marking-show-done" />
+            <span>Show ones I have marked</span>
+          </label>
+        </div>
+
+        <p class="meta">
+          Drawn answers cannot be marked by the computer. Until you award the points,
+          these count as zero and the leaderboard above is not final.
+        </p>
+
+        <p class="notice notice--error" id="marking-error" hidden></p>
+        <div class="stack" id="marking-list"></div>
       </section>
 
       <section class="card stack" id="breakdown-section">

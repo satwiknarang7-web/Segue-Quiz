@@ -47,6 +47,21 @@ export const api = {
 
   uploadImage: (quizId, data) => request('POST', `/api/quizzes/${quizId}/media`, { data }),
 
+  saveDrawing: (attemptId, questionId, data) =>
+    request('POST', `/api/attempts/${attemptId}/drawing`, { questionId, data }),
+
+  getMarkingQueue: (quizId) => request('GET', `/api/quizzes/${quizId}/marking`),
+  applyMark: (quizId, attemptId, questionId, mark) =>
+    request('POST', `/api/quizzes/${quizId}/attempts/${attemptId}/marks/${questionId}`, mark),
+  clearMark: (quizId, attemptId, questionId) =>
+    request('DELETE', `/api/quizzes/${quizId}/attempts/${attemptId}/marks/${questionId}`),
+  suggestMark: (quizId, attemptId, questionId) =>
+    request(
+      'POST',
+      `/api/quizzes/${quizId}/attempts/${attemptId}/marks/${questionId}/suggest`,
+      {},
+    ),
+
   getIntro: (quizId) => request('GET', `/api/quizzes/${quizId}/intro`),
   startAttempt: (quizId, participantName) =>
     request('POST', `/api/quizzes/${quizId}/attempts`, { participantName }),

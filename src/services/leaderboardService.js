@@ -3,6 +3,7 @@ import {
   hasOptions,
   isAnswered,
   isCorrect,
+  needsMarking,
   normaliseAnswerText,
   reviewRow,
 } from '../lib/questionTypes.js';
@@ -46,6 +47,10 @@ export const leaderboardService = {
       timedOut: attempt.timedOut,
       endedReason: attempt.endedReason ?? (attempt.timedOut ? 'timed_out' : 'submitted'),
       submittedAt: attempt.submittedAt,
+      // A row with marking outstanding is ranked on what it has earned so far.
+      // The board shows that rather than hiding the person until a teacher gets
+      // to them, because a hidden row looks like a lost attempt.
+      pendingMarkCount: attempt.pendingMarkCount ?? 0,
       position: index,
     }));
 
@@ -78,8 +83,65 @@ export const leaderboardService = {
           ? Math.round(entries.reduce((sum, e) => sum + e.durationMs, 0) / entries.length)
           : 0,
         topScore: entries.length ? entries[0].score : 0,
+        // Whether the ranking above is final at all.
+        awaitingMarkingCount: entries.filter((entry) => entry.pendingMarkCount > 0).length,
       },
       entries,
+    };
+  },
+
+  /**
+   * Every drawing still waiting on a person, oldest submission first.
+   *
+   * Marking in submission order rather than by participant keeps a class fair:
+   * whoever finished first is looked at first, and a teacher working down the
+   * list is not applying a standard that drifts as they go.
+   */
+  markingQueue(quizId) {
+    const quiz = quizService.requireQuiz(quizId);
+    const drawn = quiz.questions
+      .map((question, index) => ({ question, number: index + 1 }))
+      .filter(({ question }) => needsMarking(question));
+
+    if (drawn.length === 0) return { questions: [], items: [], remaining: 0 };
+
+    const attempts = attemptRepository
+      .listSubmittedByQuiz(quiz.id)
+      .sort((a, b) => Date.parse(a.submittedAt) - Date.parse(b.submittedAt));
+
+    const items = [];
+    for (const attempt of attempts) {
+      for (const { question, number } of drawn) {
+        const drawingUrl = attempt.answers[question.id];
+        const mark = attempt.marks?.[question.id] ?? null;
+
+        // Nothing drawn is nothing to mark: an unanswered question is already
+        // worth zero and putting it in the queue would be busywork.
+        if (!drawingUrl) continue;
+
+        items.push({
+          attemptId: attempt.id,
+          participantName: attempt.participantName,
+          submittedAt: attempt.submittedAt,
+          questionId: question.id,
+          questionNumber: number,
+          questionText: question.text,
+          maxPoints: question.points,
+          drawingUrl,
+          mark,
+        });
+      }
+    }
+
+    return {
+      questions: drawn.map(({ question, number }) => ({
+        id: question.id,
+        number,
+        text: question.text,
+        points: question.points,
+      })),
+      items,
+      remaining: items.filter((item) => !item.mark).length,
     };
   },
 
@@ -95,8 +157,9 @@ export const leaderboardService = {
 
     if (!attempt || attempt.quizId !== quiz.id) throw notFound('That attempt does not exist.');
 
+    const marks = attempt.marks ?? {};
     const questions = quiz.questions.map((question, index) =>
-      reviewRow(question, index, attempt.answers[question.id]),
+      reviewRow(question, index, attempt.answers[question.id], marks[question.id]),
     );
 
     return {
@@ -106,6 +169,7 @@ export const leaderboardService = {
       maxScore: attempt.maxScore,
       correctCount: attempt.correctCount,
       answeredCount: attempt.answeredCount,
+      pendingMarkCount: attempt.pendingMarkCount ?? 0,
       durationMs: attempt.durationMs,
       endedReason: attempt.endedReason ?? (attempt.timedOut ? 'timed_out' : 'submitted'),
       submittedAt: attempt.submittedAt,
@@ -144,6 +208,26 @@ export const leaderboardService = {
           ),
           correctIndex: question.correctIndex,
           options: question.options,
+        };
+      }
+
+      // A drawing has neither options nor text to group. What is worth showing
+      // is how far the marking has got and what it is averaging, which is the
+      // question a teacher part way through a class actually has.
+      if (needsMarking(question)) {
+        const marks = attempts
+          .map((attempt) => attempt.marks?.[question.id])
+          .filter((mark) => mark && Number.isFinite(Number(mark.points)))
+          .map((mark) => Number(mark.points));
+
+        return {
+          ...summary,
+          markedCount: marks.length,
+          awaitingMarkingCount: responses.length - marks.length,
+          maxPoints: question.points,
+          averageMark: marks.length
+            ? Number((marks.reduce((sum, points) => sum + points, 0) / marks.length).toFixed(1))
+            : 0,
         };
       }
 

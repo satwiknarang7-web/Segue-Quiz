@@ -1,7 +1,7 @@
 import { Router } from '../lib/router.js';
 import crypto from 'node:crypto';
 
-import { usesHttps } from '../config.js';
+import { config, usesHttps } from '../config.js';
 import { attemptService } from '../services/attemptService.js';
 import { quizService } from '../services/quizService.js';
 
@@ -67,6 +67,19 @@ attemptRoutes.get('/api/attempts/:attemptId', ({ params }) => attemptService.get
 
 attemptRoutes.post('/api/attempts/:attemptId/answers', ({ params, body }) =>
   attemptService.saveAnswer(params.attemptId, body),
+);
+
+/**
+ * Save the drawing a participant made for one question.
+ *
+ * Open like the rest of the taking API - a participant has no account - but
+ * narrow: it needs a live attempt, and a question on that attempt's own quiz
+ * that is actually answered by drawing.
+ */
+attemptRoutes.post(
+  '/api/attempts/:attemptId/drawing',
+  ({ params, body }) => attemptService.saveDrawing(params.attemptId, body),
+  { maxBodyBytes: Math.ceil(config.limits.imageMaxBytes * 1.4) },
 );
 
 attemptRoutes.post('/api/attempts/:attemptId/submit', ({ params, body }) => ({

@@ -13,6 +13,10 @@ const quizId = window.location.pathname.split('/').filter(Boolean)[1];
 const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 const REFRESH_INTERVAL_MS = 8_000;
 
+// Whether to offer mark suggestions at all. Without a key the button would be
+// a promise the server cannot keep, so it is not shown.
+let aiAvailable = false;
+
 const pageError = document.querySelector('#page-error');
 const body = document.querySelector('#leaderboard-body');
 const emptyState = document.querySelector('#leaderboard-empty');
@@ -42,6 +46,12 @@ function renderStats({ quiz, stats }) {
     ['Average score', `${stats.averageScore}`],
     ['Average time', formatDuration(stats.averageDurationMs)],
   ];
+
+  // Only worth a tile when there is something outstanding: on a quiz with no
+  // drawn questions it would be a permanent zero.
+  if (stats.awaitingMarkingCount > 0) {
+    tiles.push(['Awaiting marking', String(stats.awaitingMarkingCount)]);
+  }
 
   clear(document.querySelector('#stats')).append(
     ...tiles.map(([label, value]) =>
@@ -97,6 +107,9 @@ function renderLeaderboard(allEntries) {
         ]),
         el('td', {}, [
           el('div', { class: 'winner-name', text: entry.participantName }),
+          entry.pendingMarkCount > 0
+            ? el('span', { class: 'tie-note', text: 'Provisional — drawing not marked yet' })
+            : null,
           entry.endedReason === 'left_quiz'
             ? el('span', { class: 'tie-note', text: 'Ended — left the quiz' })
             : entry.timedOut
@@ -158,8 +171,19 @@ async function openReview(entry) {
     const container = clear(document.querySelector('#review-questions'));
 
     paper.questions.forEach((question) => {
-      const state = question.givenAnswer === null ? 'blank' : question.isCorrect ? 'correct' : 'wrong';
-      const verdict = { correct: 'Correct', wrong: 'Wrong', blank: 'Not answered' }[state];
+      const state = question.awaitingMarking
+        ? 'pending'
+        : question.givenAnswer === null
+          ? 'blank'
+          : question.isCorrect
+            ? 'correct'
+            : 'wrong';
+      const verdict = {
+        correct: 'Correct',
+        wrong: 'Wrong',
+        blank: 'Not answered',
+        pending: 'To be marked',
+      }[state];
 
       container.append(
         el('div', { class: 'review-q' }, [
@@ -272,6 +296,11 @@ function renderBreakdown(breakdown) {
       return;
     }
 
+    if (question.type === 'draw') {
+      container.append(renderDrawnBreakdown(question, index));
+      return;
+    }
+
     const maxCount = Math.max(1, ...question.optionCounts);
 
     container.append(
@@ -311,6 +340,22 @@ function renderBreakdown(breakdown) {
 
 /** The answer part of one person's reviewed question, which differs by type. */
 function reviewAnswerRows(question) {
+  if (question.type === 'draw') {
+    const awarded = `${question.pointsAwarded} of ${question.points}`;
+    const fromSuggestion = question.markSource === 'gemini' ? ' (from a suggestion)' : '';
+
+    return [
+      question.drawingUrl
+        ? el('img', { class: 'review-figure', src: question.drawingUrl, alt: 'Their drawing' })
+        : el('div', { class: 'review-opt', text: 'Nothing was drawn.' }),
+      el('div', {
+        class: 'meta',
+        text: question.awaitingMarking ? 'Not marked yet.' : awarded + fromSuggestion,
+      }),
+      question.markNote ? el('div', { class: 'meta', text: question.markNote }) : null,
+    ].filter(Boolean);
+  }
+
   if (question.type !== 'short') {
     return question.options.map((option, index) =>
       el(
@@ -409,6 +454,7 @@ async function refresh() {
     renderStats(data);
     renderLeaderboard(data.entries);
     renderBreakdown(data.breakdown);
+    await refreshMarking();
   } catch (error) {
     showError(pageError, error.message);
     stopAutoRefresh();
@@ -445,3 +491,220 @@ document.addEventListener('visibilitychange', () => {
 
 refresh();
 startAutoRefresh();
+
+/* ---- Marking drawn answers ----------------------------------------------- */
+
+const markingSection = document.querySelector('#marking-section');
+const markingList = document.querySelector('#marking-list');
+const markingError = document.querySelector('#marking-error');
+const showDone = document.querySelector('#marking-show-done');
+
+// Kept so that awarding a mark can redraw one row without refetching the page
+// and losing whatever the teacher was part way through typing elsewhere.
+let markingQueue = { items: [], remaining: 0, questions: [] };
+
+showDone.addEventListener('change', renderMarking);
+
+async function refreshMarking() {
+  try {
+    markingQueue = await api.getMarkingQueue(quizId);
+  } catch {
+    // A quiz with no drawn questions is the normal case; a failure here should
+    // not take the rest of the results page down with it.
+    markingQueue = { items: [], remaining: 0, questions: [] };
+  }
+  renderMarking();
+}
+
+function renderMarking() {
+  markingSection.hidden = markingQueue.questions.length === 0;
+  if (markingSection.hidden) return;
+
+  const { remaining } = markingQueue;
+  document.querySelector('#marking-remaining').textContent =
+    remaining === 0 ? 'All marked' : `${remaining} to mark`;
+
+  const items = showDone.checked
+    ? markingQueue.items
+    : markingQueue.items.filter((item) => !item.mark);
+
+  const list = clear(markingList);
+
+  if (items.length === 0) {
+    list.append(
+      el('p', {
+        class: 'meta',
+        text:
+          markingQueue.items.length === 0
+            ? 'Nobody has drawn an answer yet.'
+            : 'Everything is marked. Tick the box above to see them again.',
+      }),
+    );
+    return;
+  }
+
+  for (const item of items) list.append(renderMarkItem(item));
+}
+
+function renderMarkItem(item) {
+  const pointsInput = el('input', {
+    class: 'mark-points',
+    type: 'number',
+    min: '0',
+    max: String(item.maxPoints),
+    value: item.mark ? String(item.mark.points) : '',
+    placeholder: `0-${item.maxPoints}`,
+    'aria-label': `Points out of ${item.maxPoints}`,
+  });
+
+  const noteInput = el('input', {
+    type: 'text',
+    maxlength: '500',
+    value: item.mark?.note ?? '',
+    placeholder: 'A note for them (optional)',
+    'aria-label': 'Note',
+  });
+
+  const suggestionBox = el('div', { class: 'stack stack--tight' });
+
+  const award = async (source) => {
+    const points = Number(pointsInput.value);
+    if (!Number.isFinite(points) || pointsInput.value === '') {
+      showError(markingError, 'Enter the points to award.');
+      return;
+    }
+
+    try {
+      await api.applyMark(quizId, item.attemptId, item.questionId, {
+        points,
+        note: noteInput.value,
+        source,
+      });
+      markingError.hidden = true;
+      toast(`Marked ${item.participantName}`);
+      await refresh();
+    } catch (error) {
+      showError(markingError, error.message);
+    }
+  };
+
+  const suggest = async (button) => {
+    button.disabled = true;
+    button.textContent = 'Looking…';
+
+    try {
+      const { suggestion } = await api.suggestMark(quizId, item.attemptId, item.questionId);
+      markingError.hidden = true;
+
+      // Filled in, never awarded. The teacher still has to press the button,
+      // so nothing is recorded that a person has not looked at.
+      pointsInput.value = String(suggestion.points);
+
+      clear(suggestionBox).append(
+        el('div', { class: 'mark-suggestion' }, [
+          el('strong', { text: `Suggested: ${suggestion.points} of ${item.maxPoints}` }),
+          el('span', { text: suggestion.reason }),
+          el('span', {
+            class: 'meta',
+            text: 'A suggestion from Gemini. Check the drawing yourself before awarding it.',
+          }),
+        ]),
+      );
+    } catch (error) {
+      showError(markingError, error.message);
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Suggest a mark';
+    }
+  };
+
+  const suggestButton = el('button', {
+    class: 'button button--ghost button--small',
+    type: 'button',
+    text: 'Suggest a mark',
+    onClick: () => suggest(suggestButton),
+  });
+
+  return el('div', { class: 'mark-item', dataset: { marked: String(Boolean(item.mark)) } }, [
+    el('div', { class: 'row' }, [
+      el('span', { class: 'winner-name', text: item.participantName }),
+      el('span', { class: 'meta', text: `Q${item.questionNumber} · ${item.questionText}` }),
+      el('span', { class: 'spacer' }),
+      el('span', {
+        class: 'badge',
+        text: item.mark ? `${item.mark.points} / ${item.maxPoints}` : `out of ${item.maxPoints}`,
+      }),
+    ]),
+
+    el('img', { class: 'mark-drawing', src: item.drawingUrl, alt: `Drawing by ${item.participantName}`, loading: 'lazy' }),
+
+    suggestionBox,
+
+    el('div', { class: 'row' }, [
+      pointsInput,
+      noteInput,
+      aiAvailable ? suggestButton : null,
+      el('button', {
+        class: 'button button--small',
+        type: 'button',
+        text: item.mark ? 'Update mark' : 'Award marks',
+        onClick: () => award('teacher'),
+      }),
+      item.mark
+        ? el('button', {
+            class: 'button button--ghost button--small',
+            type: 'button',
+            text: 'Unmark',
+            onClick: async () => {
+              try {
+                await api.clearMark(quizId, item.attemptId, item.questionId);
+                await refresh();
+              } catch (error) {
+                showError(markingError, error.message);
+              }
+            },
+          })
+        : null,
+    ]),
+  ]);
+}
+
+api
+  .aiStatus()
+  .then(({ available }) => {
+    aiAvailable = available;
+    renderMarking();
+  })
+  .catch(() => {
+    // Leaving it off is the safe default: marking works without suggestions.
+  });
+
+/**
+ * A drawn question has nothing to chart until a person has marked it, so the
+ * breakdown reports the marking rather than the answers.
+ */
+function renderDrawnBreakdown(question, index) {
+  const waiting = question.awaitingMarkingCount ?? 0;
+
+  return el('div', { class: 'breakdown__item' }, [
+    el('div', { class: 'breakdown__head' }, [
+      el('span', { class: 'question__index meta', text: `Q${index + 1}` }),
+      el('span', { class: 'breakdown__text', text: question.text }),
+      el('span', { class: 'badge', text: 'Drawn' }),
+      el('span', {
+        class: 'badge',
+        text: waiting > 0 ? `${waiting} to mark` : 'All marked',
+      }),
+    ]),
+    el('p', {
+      class: 'tie-note',
+      text: [
+        `${question.responseCount} drawn`,
+        `${question.markedCount ?? 0} marked`,
+        question.markedCount
+          ? `average ${question.averageMark} of ${question.maxPoints}`
+          : 'nothing marked yet',
+      ].join(' · '),
+    }),
+  ]);
+}

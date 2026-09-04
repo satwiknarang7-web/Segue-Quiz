@@ -16,6 +16,10 @@ const state = {
   quiz: null,
   attemptId: null,
   answers: {},
+  // Strokes are kept per question so moving between questions and back does
+  // not lose a drawing. They are points, not pixels, so undo can rebuild the
+  // picture without keeping a stack of images.
+  strokes: {},
   index: 0,
   endsAt: 0,
   submitting: false,
@@ -141,6 +145,12 @@ function renderQuestion() {
 
   if (question.type === 'short') {
     optionList.append(buildShortAnswer(question));
+    finishQuestionRender(total);
+    return;
+  }
+
+  if (question.type === 'draw') {
+    optionList.append(buildDrawingPad(question));
     finishQuestionRender(total);
     return;
   }
@@ -396,8 +406,21 @@ function renderOwnReview(result) {
   const list = clear(document.querySelector('#result-review-list'));
 
   for (const question of result.review) {
-    const state = question.givenAnswer === null ? 'blank' : question.isCorrect ? 'correct' : 'wrong';
-    const verdict = { correct: 'Correct', wrong: 'Wrong', blank: 'Not answered' }[state];
+    // A drawing nobody has marked yet is neither right nor wrong, and showing
+    // it as wrong would be a lie the taker cannot check.
+    const state = question.awaitingMarking
+      ? 'pending'
+      : question.givenAnswer === null
+        ? 'blank'
+        : question.isCorrect
+          ? 'correct'
+          : 'wrong';
+    const verdict = {
+      correct: 'Correct',
+      wrong: 'Wrong',
+      blank: 'Not answered',
+      pending: 'To be marked',
+    }[state];
 
     list.append(
       el('div', { class: 'review-q' }, [
@@ -424,6 +447,23 @@ function renderOwnReview(result) {
 
 /** The answer part of one reviewed question, which differs by type. */
 function reviewAnswerRows(question) {
+  if (question.type === 'draw') {
+    const rows = [
+      question.drawingUrl
+        ? el('img', { class: 'review-figure', src: question.drawingUrl, alt: 'Your drawing' })
+        : el('div', { class: 'review-opt', text: 'You did not draw anything.' }),
+      el('div', {
+        class: 'meta',
+        text: question.awaitingMarking
+          ? 'Waiting to be marked by the quiz host.'
+          : `Marked ${question.pointsAwarded} of ${question.points}.`,
+      }),
+    ];
+
+    if (question.markNote) rows.push(el('div', { class: 'meta', text: question.markNote }));
+    return rows;
+  }
+
   if (question.type !== 'short') {
     return question.options.map((option, index) =>
       el('div', {
@@ -535,6 +575,18 @@ function renderResult(result, automatic) {
 
   renderOwnReview(result);
 
+  // Say so before the score is read as final. A drawing has to be looked at by
+  // a person, and until then the number on the screen counts it as zero.
+  const pending = document.querySelector('#result-pending');
+  if (pending) {
+    const count = result.pendingMarkCount ?? 0;
+    pending.textContent =
+      count === 1
+        ? 'One of your answers is a drawing, which the quiz host still has to mark. Your score will go up once they have.'
+        : `${count} of your answers are drawings, which the quiz host still has to mark. Your score will go up once they have.`;
+    pending.hidden = count === 0;
+  }
+
   const note = document.querySelector('#result-note');
   if (result.endedReason === 'left_quiz') {
     note.textContent =
@@ -557,3 +609,172 @@ window.addEventListener('beforeunload', (event) => {
 });
 
 loadIntro();
+
+/* ---- Drawn answers ------------------------------------------------------- */
+
+// The canvas is a fixed size whatever the screen is, so a drawing made on a
+// phone and one made on a laptop arrive at the same resolution and the teacher
+// marking them sees the same thing.
+const PAD_WIDTH = 1000;
+const PAD_HEIGHT = 700;
+
+/**
+ * A sketch pad for one question.
+ *
+ * What is saved is the picture, but what is kept while drawing is the strokes,
+ * because undo needs to rebuild the image rather than step back through copies
+ * of it. Saving is debounced and happens after a stroke ends: mid-stroke is
+ * never a finished thought, and a phone drawing a long curve would otherwise
+ * post continuously.
+ */
+function buildDrawingPad(question) {
+  const strokes = (state.strokes[question.id] ??= []);
+  let saveTimer;
+  let resumed = null;
+
+  const canvas = el('canvas', {
+    class: 'pad__canvas',
+    width: String(PAD_WIDTH),
+    height: String(PAD_HEIGHT),
+    'aria-label': 'Drawing area',
+  });
+  const context = canvas.getContext('2d');
+
+  const redraw = () => {
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, PAD_WIDTH, PAD_HEIGHT);
+
+    // Anything drawn before a reload comes back as a picture underneath, so a
+    // dropped connection does not cost the work already done.
+    if (resumed) context.drawImage(resumed, 0, 0, PAD_WIDTH, PAD_HEIGHT);
+
+    context.strokeStyle = '#101828';
+    context.lineWidth = 4;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+
+    for (const stroke of strokes) {
+      if (stroke.length === 0) continue;
+      context.beginPath();
+      context.moveTo(stroke[0].x, stroke[0].y);
+      for (const point of stroke.slice(1)) context.lineTo(point.x, point.y);
+      // A single tap is a dot, which lineTo alone would not draw.
+      if (stroke.length === 1) context.lineTo(stroke[0].x + 0.1, stroke[0].y);
+      context.stroke();
+    }
+  };
+
+  // Restore a drawing saved earlier in this attempt.
+  const savedUrl = state.answers[question.id];
+  if (typeof savedUrl === 'string' && savedUrl !== '' && strokes.length === 0) {
+    const image = new Image();
+    image.onload = () => {
+      resumed = image;
+      redraw();
+    };
+    image.src = savedUrl;
+  }
+
+  /** Where a pointer is, in the canvas's own coordinates rather than the screen's. */
+  const pointAt = (event) => {
+    const bounds = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - bounds.left) / bounds.width) * PAD_WIDTH,
+      y: ((event.clientY - bounds.top) / bounds.height) * PAD_HEIGHT,
+    };
+  };
+
+  let drawing = false;
+
+  canvas.addEventListener('pointerdown', (event) => {
+    drawing = true;
+    canvas.setPointerCapture(event.pointerId);
+    strokes.push([pointAt(event)]);
+    redraw();
+  });
+
+  canvas.addEventListener('pointermove', (event) => {
+    if (!drawing) return;
+    strokes[strokes.length - 1].push(pointAt(event));
+    redraw();
+  });
+
+  const endStroke = () => {
+    if (!drawing) return;
+    drawing = false;
+    updateAnswered();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveDrawing, 800);
+  };
+
+  canvas.addEventListener('pointerup', endStroke);
+  canvas.addEventListener('pointercancel', endStroke);
+  canvas.addEventListener('pointerleave', endStroke);
+
+  /**
+   * A drawing counts as answered as soon as there is one, so the progress
+   * bar and the navigator do not have to wait for a round trip to agree with
+   * what is on the screen.
+   */
+  function updateAnswered() {
+    const hasContent = strokes.length > 0 || resumed !== null;
+    if (hasContent) state.answers[question.id] ??= 'pending';
+    else delete state.answers[question.id];
+    updateProgress();
+  }
+
+  async function saveDrawing() {
+    try {
+      const dataUrl = canvas.toDataURL('image/png');
+      const { url } = await api.saveDrawing(state.attemptId, question.id, dataUrl);
+      state.answers[question.id] = url;
+      pageError.hidden = true;
+    } catch (error) {
+      if (error.status === 410) {
+        clearInterval(state.ticker);
+        await submit({ automatic: true });
+        return;
+      }
+      showError(pageError, `Could not save that drawing: ${error.message}`);
+    }
+  }
+
+  const undo = el('button', {
+    class: 'button button--ghost button--small',
+    type: 'button',
+    text: 'Undo',
+    onClick: () => {
+      strokes.pop();
+      redraw();
+      updateAnswered();
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveDrawing, 400);
+    },
+  });
+
+  const clearAll = el('button', {
+    class: 'button button--ghost button--small',
+    type: 'button',
+    text: 'Start again',
+    onClick: () => {
+      strokes.length = 0;
+      resumed = null;
+      redraw();
+      updateAnswered();
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveDrawing, 400);
+    },
+  });
+
+  redraw();
+
+  return el('div', { class: 'pad' }, [
+    canvas,
+    el('div', { class: 'row' }, [
+      el('span', { class: 'meta', text: 'Draw your answer above.' }),
+      el('span', { class: 'spacer' }),
+      undo,
+      clearAll,
+    ]),
+  ]);
+}

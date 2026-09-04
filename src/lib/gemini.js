@@ -220,3 +220,111 @@ export function toPasteFormat(questions) {
     })
     .join('\n');
 }
+
+/* ---- Suggesting a mark for a drawing ------------------------------------ */
+
+const MARK_SCHEMA = {
+  type: 'object',
+  properties: {
+    points: { type: 'integer' },
+    reason: { type: 'string' },
+  },
+  required: ['points', 'reason'],
+};
+
+function buildMarkPrompt({ questionText, maxPoints, guidance }) {
+  const lines = [
+    'You are helping a teacher mark one hand-drawn answer.',
+    '',
+    `The question was: ${questionText}`,
+    `It is worth ${maxPoints} point(s).`,
+    '',
+    'Look at the drawing and suggest a mark out of those points.',
+    '',
+    'Rules:',
+    `- points must be a whole number from 0 to ${maxPoints}.`,
+    '- reason must be one short sentence a teacher could read out.',
+    '- Judge only what is drawn. Do not assume anything not visible.',
+    '- Say so in the reason if the drawing is unclear or you cannot tell what',
+    '  it shows, and mark low rather than guessing generously.',
+    '- Neatness is not the point. Mark what the drawing shows, not how tidy it is.',
+  ];
+
+  if (guidance) lines.push('', `What the teacher is looking for: ${guidance}`);
+
+  return lines.join('\n');
+}
+
+/**
+ * Ask for a suggested mark on one drawing.
+ *
+ * A suggestion only. Nothing here writes a mark: the caller shows it to the
+ * teacher, who awards the points. Marking a child's work is not a decision to
+ * hand to a model, and the clamp in awardFor means an accepted suggestion still
+ * cannot exceed what the question is worth.
+ */
+export async function suggestMark(
+  { questionText, maxPoints, guidance = '', imageBase64, mimeType = 'image/png' },
+  { fetchImpl = fetch, signal } = {},
+) {
+  if (!isConfigured()) {
+    throw new Error('Mark suggestions are switched off: GEMINI_API_KEY is not set.');
+  }
+  if (!imageBase64) throw new Error('There is no drawing to look at.');
+
+  let response;
+  try {
+    response = await fetchImpl(ENDPOINT, {
+      method: 'POST',
+      signal,
+      headers: {
+        'x-goog-api-key': process.env.GEMINI_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: buildMarkPrompt({ questionText, maxPoints, guidance }) },
+              { type: 'image', mime_type: mimeType, data: imageBase64 },
+            ],
+          },
+        ],
+        response_format: { type: 'text', mime_type: 'application/json', schema: MARK_SCHEMA },
+      }),
+    });
+  } catch (error) {
+    throw new Error(`Could not reach Gemini (${error.message}). Check the server's connection.`);
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Gemini rejected the API key. Check GEMINI_API_KEY.');
+    }
+    if (response.status === 429) {
+      throw new Error('Gemini is rate limiting this key. Wait a moment and try again.');
+    }
+    throw new Error(`Gemini request failed (${response.status}): ${detail.slice(0, 200)}`);
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(extractText(await response.json()));
+  } catch {
+    throw new Error('Gemini did not return a usable suggestion. Mark it yourself.');
+  }
+
+  if (!Number.isFinite(Number(parsed?.points))) {
+    throw new Error('Gemini did not suggest a mark. Mark it yourself.');
+  }
+
+  return {
+    // Clamped here as well as at the point of award, so a teacher is never
+    // shown a suggestion the question could not carry.
+    points: Math.max(0, Math.min(maxPoints, Math.round(Number(parsed.points)))),
+    reason: String(parsed.reason ?? '').slice(0, 300),
+  };
+}

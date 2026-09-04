@@ -14,10 +14,12 @@ const toRow = (attempt) => ({
   timed_out: Boolean(attempt.timedOut),
   ended_reason: attempt.endedReason ?? null,
   answers: attempt.answers ?? {},
+  marks: attempt.marks ?? {},
   score: attempt.score ?? 0,
   correct_count: attempt.correctCount ?? 0,
   max_score: attempt.maxScore ?? 0,
   answered_count: attempt.answeredCount ?? 0,
+  pending_mark_count: attempt.pendingMarkCount ?? 0,
 });
 
 const asIso = (value) => (value ? new Date(value).toISOString() : null);
@@ -36,10 +38,12 @@ const fromRow = (row) => ({
   timedOut: row.timed_out,
   endedReason: row.ended_reason,
   answers: row.answers ?? {},
+  marks: row.marks ?? {},
   score: row.score,
   correctCount: row.correct_count,
   maxScore: row.max_score,
   answeredCount: row.answered_count,
+  pendingMarkCount: row.pending_mark_count ?? 0,
 });
 
 const store = createStore({
@@ -47,8 +51,10 @@ const store = createStore({
   table: 'attempts',
   toRow,
   fromRow,
-  // Added by supabase/migrations/0002_attempt_device.sql.
-  requiredColumns: ['id', 'device_id'],
+  // Added by 0002_attempt_device.sql and 0005_marking.sql. Checked at start-up
+  // so a database that predates a migration fails there, rather than when
+  // somebody is halfway through marking a class.
+  requiredColumns: ['id', 'device_id', 'marks', 'pending_mark_count'],
 });
 
 export const attemptRepository = {

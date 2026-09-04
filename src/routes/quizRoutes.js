@@ -1,11 +1,12 @@
 import { buildJoinUrl, config } from '../config.js';
-import { generateQuestions, isConfigured, toPasteFormat } from '../lib/gemini.js';
+import { generateQuestions, isConfigured, suggestMark, toPasteFormat } from '../lib/gemini.js';
 import { HttpError, badRequest } from '../lib/errors.js';
 import { send, sendNoContent } from '../lib/http.js';
 import { renderQrPng, renderQrSvg } from '../lib/qrcode.js';
 import { Router } from '../lib/router.js';
 import { leaderboardService } from '../services/leaderboardService.js';
-import { mediaStore, storeUploadedImage } from '../store/mediaStore.js';
+import { attemptService } from '../services/attemptService.js';
+import { mediaStore, readMediaByUrl, storeUploadedImage } from '../store/mediaStore.js';
 import { quizService } from '../services/quizService.js';
 
 export const quizRoutes = new Router();
@@ -177,6 +178,78 @@ quizRoutes.post(
       user.id,
     ),
   }),
+  maker,
+);
+
+/* ---- Marking answers a computer cannot grade ---- */
+
+quizRoutes.get(
+  '/api/quizzes/:quizId/marking',
+  ({ params, user }) => {
+    quizService.requireOwnedQuiz(params.quizId, user.id);
+    return leaderboardService.markingQueue(params.quizId);
+  },
+  maker,
+);
+
+quizRoutes.post(
+  '/api/quizzes/:quizId/attempts/:attemptId/marks/:questionId',
+  ({ params, body, user }) => {
+    quizService.requireOwnedQuiz(params.quizId, user.id);
+    const attempt = attemptService.applyMark(params.attemptId, params.questionId, body);
+    return { attemptId: attempt.id, score: attempt.score, pendingMarkCount: attempt.pendingMarkCount };
+  },
+  maker,
+);
+
+quizRoutes.delete(
+  '/api/quizzes/:quizId/attempts/:attemptId/marks/:questionId',
+  ({ params, user }) => {
+    quizService.requireOwnedQuiz(params.quizId, user.id);
+    const attempt = attemptService.clearMark(params.attemptId, params.questionId);
+    return { attemptId: attempt.id, score: attempt.score, pendingMarkCount: attempt.pendingMarkCount };
+  },
+  maker,
+);
+
+/**
+ * Ask for a suggested mark on one drawing.
+ *
+ * Returns a suggestion and writes nothing. Awarding the marks is a separate
+ * call the teacher makes, so accepting a suggestion is always a deliberate act
+ * and never a side effect of looking at one.
+ */
+quizRoutes.post(
+  '/api/quizzes/:quizId/attempts/:attemptId/marks/:questionId/suggest',
+  async ({ params, body, user }) => {
+    const quiz = quizService.requireOwnedQuiz(params.quizId, user.id);
+    assertGenerationAllowed(user.id);
+
+    const question = quiz.questions.find((candidate) => candidate.id === params.questionId);
+    if (!question) throw new HttpError(404, 'That question does not exist.');
+
+    const attempt = attemptService.rawAttempt(params.attemptId, quiz.id);
+    const drawingUrl = attempt.answers[question.id];
+    if (!drawingUrl) throw badRequest('There is no drawing for that question.');
+
+    const image = await readMediaByUrl(drawingUrl);
+    if (!image) throw new HttpError(404, 'That drawing could not be read.');
+
+    try {
+      const suggestion = await suggestMark(
+        {
+          questionText: question.text,
+          maxPoints: question.points,
+          guidance: String(body?.guidance ?? '').slice(0, 500),
+          imageBase64: image.buffer.toString('base64'),
+          mimeType: image.type,
+        },
+      );
+      return { suggestion };
+    } catch (error) {
+      throw new HttpError(isConfigured() ? 502 : 503, error.message);
+    }
+  },
   maker,
 );
 

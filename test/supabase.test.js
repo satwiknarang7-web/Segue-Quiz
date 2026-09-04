@@ -38,7 +38,7 @@ const fake = http.createServer(async (req, res) => {
       const wanted = select.split(',');
       const known = {
         quizzes: ['id', 'owner_id', 'shuffle_questions', 'shuffle_options', 'reveal_answers'],
-        attempts: ['id', 'device_id'],
+        attempts: ['id', 'device_id', 'marks', 'pending_mark_count'],
         users: ['id'],
       }[table] ?? ['id'];
       const missing = wanted.find((column) => !known.includes(column));

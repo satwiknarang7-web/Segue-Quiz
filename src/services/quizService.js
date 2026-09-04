@@ -4,6 +4,7 @@ import { createId, createJoinCode } from '../lib/ids.js';
 import { asArray, asBoolean, asInteger, asOptionalString, asString } from '../lib/validate.js';
 import {
   CHOICE,
+  DRAW,
   QUESTION_TYPES,
   SHORT,
   hasOptions,
@@ -87,7 +88,10 @@ function parseQuestionPayload(payload = {}) {
       ? 1
       : asInteger(payload.points, 'points', { min: limits.minPoints, max: limits.maxPoints });
 
-  const specific = type === SHORT ? parseShortQuestion(payload) : parseChoiceQuestion(payload);
+  // A drawn question carries no answer key at all - that is the whole point of
+  // it - so there is nothing type-specific to read.
+  const specific =
+    type === DRAW ? {} : type === SHORT ? parseShortQuestion(payload) : parseChoiceQuestion(payload);
 
   return { text, type, ...specific, ...parseQuestionImage(payload), points };
 }

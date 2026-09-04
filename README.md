@@ -74,6 +74,10 @@ Questions written before this existed are multiple choice, and nothing about the
 changed - there was no migration, because questions live in a `jsonb` column and the
 new fields simply ride along.
 
+**Draw an answer** gives the taker a sketch pad. There is no answer key, because
+there cannot be one - so this is the only question type whose marks a person has to
+decide. See [Marking drawn answers](#marking-drawn-answers).
+
 ### Diagrams
 
 Any question can carry a picture: a circuit, a graph, a map. Attach one under **Diagram**
@@ -99,6 +103,45 @@ file's first bytes, so renaming a script to `.png` does not get it in.
 A question can only point at an image uploaded through this application. An arbitrary URL
 is refused, because it would let whoever writes a quiz have every taker's browser fetch
 something from a host nobody here controls.
+
+### Marking drawn answers
+
+A drawing cannot be compared against an answer key, so a quiz containing one behaves
+differently in a way worth being clear about:
+
+- **An attempt is still submitted with a score.** It counts everything that can be
+  marked automatically and treats an unmarked drawing as zero. Nobody waits.
+- **That score is provisional.** The leaderboard marks those rows
+  *Provisional - drawing not marked yet*, and a tile shows how many are outstanding.
+  The taker is told the same thing on their own result screen, so a low number does
+  not read as a mark they have been given.
+- **Marking changes the order.** That is the point of flagging it rather than hiding
+  it: the ranking is real, just not final.
+
+The **Marking** section on the results page lists every drawing still waiting, oldest
+submission first - so whoever finished first is looked at first, and a standard does not
+drift down a class. Award the points, optionally with a note the taker sees, and the
+attempt is re-scored immediately. **Unmark** puts one back in the queue.
+
+#### Suggested marks
+
+With `GEMINI_API_KEY` set, each drawing gets a **Suggest a mark** button. It sends the
+drawing and the question, and returns a suggested number of points and a one-line reason.
+
+It fills the box in. It never awards anything. Accepting a suggestion is a separate
+click, and the awarded points are clamped to what the question is worth, so a suggestion
+accepted without reading still cannot put somebody above the maximum. Where a mark came
+from is recorded, and a mark that came from a suggestion is labelled as such in the
+per-person review.
+
+Marking a child's work is not a decision to hand to a model. Treat it as a first pass
+that saves typing, not as the mark.
+
+> **Not yet verified against the live API.** The suggestion request sends the image as a
+> structured content part, and that request shape has only been tested against a stub -
+> there is no Gemini key on this machine to try it with. Everything else here is tested
+> end to end. If the first suggestion comes back with a 400, the request body is built in
+> one place, `suggestMark` in `src/lib/gemini.js`, and that is the only thing to adjust.
 
 ### Adding many questions at once
 

@@ -12,8 +12,9 @@
 
 export const CHOICE = 'choice';
 export const SHORT = 'short';
+export const DRAW = 'draw';
 
-export const QUESTION_TYPES = [CHOICE, SHORT];
+export const QUESTION_TYPES = [CHOICE, SHORT, DRAW];
 
 /**
  * Fold away the differences that are about typing rather than knowing.
@@ -44,6 +45,16 @@ export const isChoice = (question) => typeOf(question) === CHOICE;
 export const hasOptions = (question) => isChoice(question);
 
 /**
+ * Whether a person has to decide the marks.
+ *
+ * A drawing cannot be compared to an answer key, so an attempt containing one
+ * has no final score when it is submitted. Everything downstream that assumes
+ * a score exists - the leaderboard, the ranking, the tie on time - has to know
+ * that, which is why this is asked rather than inferred from a missing value.
+ */
+export const needsMarking = (question) => typeOf(question) === DRAW;
+
+/**
  * Whether a stored answer counts as given.
  *
  * Option 0 is a real answer and an empty string is not, so this cannot be a
@@ -51,12 +62,18 @@ export const hasOptions = (question) => isChoice(question);
  */
 export function isAnswered(question, answer) {
   if (answer === undefined || answer === null) return false;
-  return isChoice(question) ? Number.isInteger(answer) : normaliseAnswerText(answer) !== '';
+  if (isChoice(question)) return Number.isInteger(answer);
+  // A drawing is stored as the URL of the image it was saved to.
+  return normaliseAnswerText(answer) !== '';
 }
 
 /** Whether a given answer earns the marks. */
 export function isCorrect(question, answer) {
   if (!isAnswered(question, answer)) return false;
+
+  // A drawing is never right or wrong on its own; awardFor decides, once
+  // somebody has marked it.
+  if (needsMarking(question)) return false;
 
   if (isChoice(question)) return answer === question.correctIndex;
 
@@ -66,15 +83,37 @@ export function isCorrect(question, answer) {
   );
 }
 
-/** The answer key, as something a person can read. */
+/** The answer key, as something a person can read. A drawing has none. */
 export function correctAnswerText(question) {
+  if (needsMarking(question)) return '';
   if (isChoice(question)) return question.options?.[question.correctIndex] ?? '';
   return question.acceptedAnswers?.[0] ?? '';
+}
+
+/**
+ * The marks one answer earns, and whether anything is still owed.
+ *
+ * A mark is clamped to the question's own points rather than trusted, so a bad
+ * value - or a model's suggestion someone accepted without reading - cannot put
+ * a taker above the maximum and break the leaderboard.
+ */
+export function awardFor(question, answer, mark) {
+  if (!isAnswered(question, answer)) return { points: 0, pending: false };
+
+  if (!needsMarking(question)) {
+    return { points: isCorrect(question, answer) ? question.points : 0, pending: false };
+  }
+
+  if (!mark || !Number.isFinite(Number(mark.points))) return { points: 0, pending: true };
+
+  const points = Math.max(0, Math.min(question.points, Math.round(Number(mark.points))));
+  return { points, pending: false };
 }
 
 /** What the taker actually gave, as something a person can read. */
 export function answerText(question, answer) {
   if (!isAnswered(question, answer)) return '';
+  if (needsMarking(question)) return 'a drawing';
   return isChoice(question) ? (question.options?.[answer] ?? '') : String(answer);
 }
 
@@ -86,9 +125,12 @@ export function answerText(question, answer) {
  * `options` and `correctIndex` are present only for choice questions; a client
  * should switch on `type` rather than assume either exists.
  */
-export function reviewRow(question, index, answer) {
+export function reviewRow(question, index, answer, mark = null) {
   const answered = isAnswered(question, answer);
-  const correct = isCorrect(question, answer);
+  const award = awardFor(question, answer, mark);
+  const correct = needsMarking(question)
+    ? !award.pending && award.points === question.points
+    : isCorrect(question, answer);
 
   const row = {
     number: index + 1,
@@ -101,10 +143,18 @@ export function reviewRow(question, index, answer) {
     imageAlt: question.imageAlt ?? '',
     isCorrect: correct,
     points: question.points,
-    pointsAwarded: correct ? question.points : 0,
+    pointsAwarded: award.points,
+    awaitingMarking: award.pending,
     correctAnswer: correctAnswerText(question),
     givenAnswer: answered ? answerText(question, answer) : null,
   };
+
+  if (needsMarking(question)) {
+    row.drawingUrl = answered ? String(answer) : null;
+    row.markNote = mark?.note ?? '';
+    row.markSource = mark?.source ?? null;
+    return row;
+  }
 
   if (isChoice(question)) {
     row.options = question.options;

@@ -148,6 +148,24 @@
         background: #fff;
       }
 
+      /* touch-action none, or dragging a finger across the pad scrolls the
+         page instead of drawing on it. */
+      .pad {
+        display: grid;
+        gap: 8px;
+      }
+
+      .pad__canvas {
+        width: 100%;
+        aspect-ratio: 10 / 7;
+        touch-action: none;
+        border: 1.5px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        background: #fff;
+        cursor: crosshair;
+        display: block;
+      }
+
       .short-answer {
         width: 100%;
         font: inherit;
@@ -241,6 +259,7 @@
       .review-q__verdict[data-state="correct"] { background: var(--success-soft); color: var(--success); }
       .review-q__verdict[data-state="wrong"] { background: var(--danger-soft); color: var(--danger); }
       .review-q__verdict[data-state="blank"] { background: var(--bg-subtle); color: var(--text-faint); }
+      .review-q__verdict[data-state="pending"] { background: var(--accent-soft); color: var(--accent); }
 
       .review-figure {
         display: block;
@@ -359,6 +378,7 @@
           <span class="meta" id="result-detail"></span>
         </div>
         <p class="notice notice--info" id="result-note" hidden></p>
+        <p class="notice notice--info" id="result-pending" hidden></p>
           <p class="notice notice--info" id="result-locked" hidden>
             Your answers are recorded. The quiz host decides when to share which
             questions you got right.

@@ -27,6 +27,15 @@ let editingQuestionId = null;
 
 /** The answer key as the author sees it, which depends on the type. */
 function renderAnswerKey(question) {
+  if (question.type === 'draw') {
+    return [
+      el('li', { class: 'answer' }, [
+        el('span', { class: 'answer__marker', text: '✎' }),
+        el('span', { text: 'Marked by you after the quiz' }),
+      ]),
+    ];
+  }
+
   if (question.type === 'short') {
     const [first, ...rest] = question.acceptedAnswers ?? [];
     return [
@@ -65,6 +74,7 @@ function renderQuestion(question, index) {
       el('span', { class: 'question__index', text: `Q${index + 1}` }),
       el('span', { class: 'question__text', text: question.text }),
       question.type === 'short' ? el('span', { class: 'badge', text: 'Typed' }) : null,
+      question.type === 'draw' ? el('span', { class: 'badge', text: 'Drawn' }) : null,
       el('span', { class: 'badge', text: `${question.points} pt${question.points === 1 ? '' : 's'}` }),
     ]),
     question.imageUrl
@@ -498,9 +508,11 @@ function currentQuestionType() {
 
 /** Show the fields the chosen type needs, and only those. */
 function syncQuestionType() {
-  const short = currentQuestionType() === 'short';
-  document.querySelector('#choice-fields').hidden = short;
-  document.querySelector('#short-fields').hidden = !short;
+  const type = currentQuestionType();
+  // A drawing has no answer key at all, so neither block applies.
+  document.querySelector('#choice-fields').hidden = type !== 'choice';
+  document.querySelector('#short-fields').hidden = type !== 'short';
+  document.querySelector('#draw-note').hidden = type !== 'draw';
   hideNotice(questionError);
   syncOptionControls();
 }
@@ -518,7 +530,7 @@ function openQuestionDialog(question = null) {
   document.querySelector('#question-text').value = question?.text ?? '';
   document.querySelector('#question-points').value = question?.points ?? 1;
 
-  const type = question?.type === 'short' ? 'short' : 'choice';
+  const type = ['short', 'draw'].includes(question?.type) ? question.type : 'choice';
   document.querySelector(`input[name="question-type"][value="${type}"]`).checked = true;
 
   clear(optionRows);
@@ -570,7 +582,9 @@ document.querySelector('#question-form').addEventListener('submit', async (event
     imageAlt: document.querySelector('#image-alt').value,
   };
 
-  if (type === 'short') {
+  if (type === 'draw') {
+    // Nothing else to collect: the answer key is a person, later.
+  } else if (type === 'short') {
     const accepted = [...answerRows.children]
       .map((row) => row.querySelector('input[type="text"]').value.trim())
       .filter((answer) => answer !== '');

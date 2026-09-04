@@ -153,3 +153,27 @@ export async function storeUploadedImage(payload = {}) {
   const { id, url } = await mediaStore.put(buffer, detected);
   return { id, url, type: detected.type, bytes: buffer.length };
 }
+
+/**
+ * The bytes behind a stored image URL, whichever backend holds it.
+ *
+ * Only needed when something server-side has to look at a picture rather than
+ * hand its address to a browser - which today means asking a model to suggest
+ * a mark for a drawing.
+ */
+export async function readMediaByUrl(url, { fetchImpl = fetch } = {}) {
+  if (typeof url !== 'string' || url === '') return null;
+
+  if (url.startsWith('/media/')) {
+    const file = await mediaStore.get(url.slice('/media/'.length));
+    return file ? { buffer: file.buffer, type: file.type } : null;
+  }
+
+  // Stored in Supabase, whose bucket is public, so a plain read is enough.
+  const response = await fetchImpl(url);
+  if (!response.ok) return null;
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const type = detectImageType(buffer)?.type;
+  return type ? { buffer, type } : null;
+}
