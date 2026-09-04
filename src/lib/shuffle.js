@@ -11,6 +11,8 @@
  * question breakdown and the CSV export never need to know shuffling happened.
  */
 
+import { hasOptions } from './questionTypes.js';
+
 /** FNV-1a, for turning a seed string into a 32-bit number. */
 function hash(seed) {
   let value = 0x811c9dc5;
@@ -61,6 +63,8 @@ export const optionOrder = (attemptId, questionId, count) =>
  * answer key uses. Without shuffling the two are the same.
  */
 export function toOriginalOption(quiz, attemptId, question, displayedIndex) {
+  // A typed answer has no positions to translate.
+  if (!hasOptions(question)) return displayedIndex;
   if (!quiz.shuffleOptions) return displayedIndex;
 
   const order = optionOrder(attemptId, question.id, question.options.length);

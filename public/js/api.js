@@ -48,8 +48,8 @@ export const api = {
   getIntro: (quizId) => request('GET', `/api/quizzes/${quizId}/intro`),
   startAttempt: (quizId, participantName) =>
     request('POST', `/api/quizzes/${quizId}/attempts`, { participantName }),
-  saveAnswer: (attemptId, questionId, optionIndex) =>
-    request('POST', `/api/attempts/${attemptId}/answers`, { questionId, optionIndex }),
+  saveAnswer: (attemptId, questionId, answer) =>
+    request('POST', `/api/attempts/${attemptId}/answers`, { questionId, answer }),
   submitAttempt: (attemptId, answers) =>
     request('POST', `/api/attempts/${attemptId}/submit`, { answers }),
 };

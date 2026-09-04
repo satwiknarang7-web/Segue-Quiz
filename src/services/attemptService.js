@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { badRequest, conflict, gone, notFound } from '../lib/errors.js';
 import { createId } from '../lib/ids.js';
 import { toOriginalOption } from '../lib/shuffle.js';
+import { hasOptions, isCorrect, normaliseAnswerText, reviewRow } from '../lib/questionTypes.js';
 import { asInteger, asString } from '../lib/validate.js';
 import { attemptRepository } from '../repositories/attemptRepository.js';
 import { quizService } from './quizService.js';
@@ -16,7 +17,7 @@ function grade(quiz, answers) {
   let correctCount = 0;
 
   for (const question of quiz.questions) {
-    if (answers[question.id] === question.correctIndex) {
+    if (isCorrect(question, answers[question.id])) {
       score += question.points;
       correctCount += 1;
     }
@@ -30,21 +31,39 @@ function grade(quiz, answers) {
   };
 }
 
-/** Only accept answers for questions that exist, with an in-range option. */
+/**
+ * Read one submitted answer into the form it is stored in, or null for "not
+ * answered". Throws if the value is the wrong shape for the question's type.
+ *
+ * A blank typed answer is not an answer: it is stored as absent, so that
+ * clearing a text box leaves the same state as never having touched it.
+ */
+function readAnswer(quiz, question, value, attemptId) {
+  if (value === null || value === undefined) return null;
+
+  if (!hasOptions(question)) {
+    const text = asString(value, 'answer', { max: config.limits.shortAnswerMaxLength, min: 0 });
+    return normaliseAnswerText(text) === '' ? null : text;
+  }
+
+  const displayed = asInteger(value, 'answer', { min: 0, max: question.options.length - 1 });
+  // Store against the answer key's order, never the order it was shown in.
+  return toOriginalOption(quiz, attemptId, question, displayed);
+}
+
+/** Only accept answers for questions that exist, in a shape that type allows. */
 function sanitiseAnswers(quiz, rawAnswers, attemptId = null) {
   if (rawAnswers === undefined || rawAnswers === null) return {};
   if (typeof rawAnswers !== 'object' || Array.isArray(rawAnswers)) {
-    throw badRequest('"answers" must be an object of questionId to option index.');
+    throw badRequest('"answers" must be an object of questionId to answer.');
   }
 
   const answers = {};
   for (const [questionId, value] of Object.entries(rawAnswers)) {
-    if (value === null || value === undefined) continue;
     const question = quiz.questions.find((candidate) => candidate.id === questionId);
     if (!question) continue; // silently drop stale questions rather than failing a submission
-    const displayed = asInteger(value, 'answer', { min: 0, max: question.options.length - 1 });
-    // Store against the answer key's order, never the order it was shown in.
-    answers[questionId] = toOriginalOption(quiz, attemptId, question, displayed);
+    const answer = readAnswer(quiz, question, value, attemptId);
+    if (answer !== null) answers[questionId] = answer;
   }
   return answers;
 }
@@ -80,21 +99,9 @@ function finalise(attempt, quiz, { at = Date.now(), reason = 'submitted' } = {})
 
 /** A taker's own paper: their pick against the answer key, question by question. */
 function buildReview(quiz, attempt) {
-  return quiz.questions.map((question, index) => {
-    const chosen = attempt.answers[question.id];
-    const answered = chosen !== undefined && chosen !== null;
-
-    return {
-      number: index + 1,
-      text: question.text,
-      options: question.options,
-      correctIndex: question.correctIndex,
-      chosenIndex: answered ? chosen : null,
-      isCorrect: answered && chosen === question.correctIndex,
-      points: question.points,
-      pointsAwarded: answered && chosen === question.correctIndex ? question.points : 0,
-    };
-  });
+  return quiz.questions.map((question, index) =>
+    reviewRow(question, index, attempt.answers[question.id]),
+  );
 }
 
 /** Public shape of an attempt in progress - never leaks the answer key. */
@@ -216,17 +223,16 @@ export const attemptService = {
     const question = quiz.questions.find((candidate) => candidate.id === questionId);
     if (!question) throw notFound('That question does not exist.');
 
+    // "optionIndex" is what clients sent before typed answers existed. Still
+    // read, so an attempt already open during a deploy keeps autosaving.
+    const submitted = payload.answer !== undefined ? payload.answer : payload.optionIndex;
+    const answer = readAnswer(quiz, question, submitted, attempt.id);
+
     const answers = { ...attempt.answers };
-    if (payload.optionIndex === null) {
+    if (answer === null) {
       delete answers[questionId];
     } else {
-      const displayed = asInteger(payload.optionIndex, 'optionIndex', {
-        min: 0,
-        max: question.options.length - 1,
-      });
-      // The participant clicked position N of what they were shown; translate
-      // it to the answer key's order so scoring never sees the shuffle.
-      answers[questionId] = toOriginalOption(quiz, attempt.id, question, displayed);
+      answers[questionId] = answer;
     }
 
     const updated = attemptRepository.update(attempt.id, (current) => ({ ...current, answers }));

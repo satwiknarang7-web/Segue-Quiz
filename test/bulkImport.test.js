@@ -147,3 +147,61 @@ test('an empty paste is refused rather than silently doing nothing', () => {
   const quiz = newQuiz();
   assert.throws(() => quizService.addQuestionsFromText(quiz.id, '   ', OWNER), /nothing to import/i);
 });
+
+/* ---- Typed questions ----------------------------------------------------- */
+
+test('a line starting with = becomes a typed question', () => {
+  const { questions, errors } = parseBulkQuestions('=SI unit of force?\tnewton\tN');
+
+  assert.deepEqual(errors, []);
+  assert.equal(questions.length, 1);
+  assert.equal(questions[0].type, 'short');
+  assert.equal(questions[0].text, 'SI unit of force?', 'the marker is not part of the question');
+  assert.deepEqual(questions[0].acceptedAnswers, ['newton', 'N']);
+  assert.equal(questions[0].options, undefined);
+});
+
+test('one paste can mix both types', () => {
+  const { questions, errors } = parseBulkQuestions(
+    ['Capital of France?\tBerlin\t*Paris', '=Chemical symbol for gold?\tAu'].join('\n'),
+  );
+
+  assert.deepEqual(errors, []);
+  assert.deepEqual(
+    questions.map((question) => question.type),
+    ['choice', 'short'],
+  );
+});
+
+test('a forgotten asterisk is still an error, not a typed question', () => {
+  // The whole reason the marker is explicit: this is the commonest mistake in
+  // a paste, and turning it into a question of the wrong type would hide it.
+  const { questions, errors } = parseBulkQuestions('Capital of France?\tBerlin\tParis');
+
+  assert.equal(questions.length, 0);
+  assert.match(errors[0].message, /No correct answer marked/);
+});
+
+test('a typed question with nothing after it is reported', () => {
+  const { errors } = parseBulkQuestions('=A question with no answer');
+  assert.match(errors[0].message, /at least one answer/);
+});
+
+test('accepted answers that grade the same are refused in a paste too', () => {
+  const { errors } = parseBulkQuestions('=Force unit?\t15 N\t15   n');
+  assert.match(errors[0].message, /same once spacing and case are ignored/);
+});
+
+test('a typed paste survives into a real quiz', () => {
+  const quiz = newQuiz();
+  const { added } = quizService.addQuestionsFromText(
+    quiz.id,
+    '=Chemical symbol for gold?\tAu\taurum',
+    OWNER,
+  );
+
+  assert.equal(added, 1);
+  const [question] = quizService.requireQuiz(quiz.id).questions;
+  assert.equal(question.type, 'short');
+  assert.deepEqual(question.acceptedAnswers, ['Au', 'aurum']);
+});

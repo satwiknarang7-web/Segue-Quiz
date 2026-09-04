@@ -88,6 +88,7 @@ quizRoutes.post(
         count: body?.count,
         difficulty: String(body?.difficulty ?? '').slice(0, 40),
         notes: String(body?.notes ?? '').slice(0, 1000),
+        style: String(body?.style ?? 'mixed'),
       });
     } catch (error) {
       // The client library explains what actually went wrong - a missing key,

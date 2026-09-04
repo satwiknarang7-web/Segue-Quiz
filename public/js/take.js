@@ -134,11 +134,16 @@ function renderQuestion() {
   document.querySelector('#question-position').textContent = `Question ${state.index + 1} of ${total}`;
   document.querySelector('#question-prompt').textContent = question.text;
 
-  const answered = Object.keys(state.answers).length;
-  document.querySelector('#progress-fill').style.width = `${(answered / total) * 100}%`;
-  document.querySelector('#progress-label').textContent = `${answered}/${total}`;
+  updateProgress();
 
   const optionList = clear(document.querySelector('#option-list'));
+
+  if (question.type === 'short') {
+    optionList.append(buildShortAnswer(question));
+    finishQuestionRender(total);
+    return;
+  }
+
   question.options.forEach((option, index) => {
     const selected = state.answers[question.id] === index;
     optionList.append(
@@ -158,6 +163,11 @@ function renderQuestion() {
     );
   });
 
+  finishQuestionRender(total);
+}
+
+/** The parts of the question screen that are the same whatever the type is. */
+function finishQuestionRender(total) {
   const onLastQuestion = state.index === total - 1;
   document.querySelector('#previous-button').disabled = state.index === 0;
   document.querySelector('#next-button').disabled = onLastQuestion;
@@ -168,6 +178,15 @@ function renderQuestion() {
   const submitButton = document.querySelector('#submit-button');
   submitButton.className = onLastQuestion ? 'button' : 'button button--ghost';
 
+  renderNavigator();
+}
+
+/** Progress and the navigator, without rebuilding the answer area. */
+function updateProgress() {
+  const total = state.quiz.questions.length;
+  const answered = Object.keys(state.answers).length;
+  document.querySelector('#progress-fill').style.width = `${(answered / total) * 100}%`;
+  document.querySelector('#progress-label').textContent = `${answered}/${total}`;
   renderNavigator();
 }
 
@@ -192,13 +211,73 @@ function renderNavigator() {
   });
 }
 
+/**
+ * A typed answer, which cannot re-render the question on each keystroke the
+ * way clicking an option does - that would take the focus and the caret with
+ * it. So the box owns its own value and only nudges the progress display.
+ *
+ * Saving is debounced, because a keystroke is not a decision. It is a safety
+ * net in any case: submitting sends the whole answer set, so nothing typed is
+ * lost even if the last autosave never went out.
+ */
+function buildShortAnswer(question) {
+  let timer;
+
+  const input = el('input', {
+    class: 'short-answer',
+    type: 'text',
+    value: state.answers[question.id] ?? '',
+    maxlength: '200',
+    placeholder: 'Type your answer',
+    'aria-label': 'Your answer',
+    autocomplete: 'off',
+    autocorrect: 'off',
+    autocapitalize: 'off',
+    spellcheck: 'false',
+    enterkeyhint: 'done',
+  });
+
+  const store = () => {
+    const value = input.value.trim();
+    if (value === '') delete state.answers[question.id];
+    else state.answers[question.id] = value;
+    updateProgress();
+  };
+
+  input.addEventListener('input', () => {
+    store();
+    clearTimeout(timer);
+    timer = setTimeout(() => saveAnswer(question, state.answers[question.id] ?? null), 700);
+  });
+
+  // Leaving the box is a decision, so it should not have to wait out the timer.
+  input.addEventListener('blur', () => {
+    clearTimeout(timer);
+    store();
+    saveAnswer(question, state.answers[question.id] ?? null);
+  });
+
+  // Enter would otherwise do nothing visible on a phone keyboard.
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      input.blur();
+    }
+  });
+
+  return input;
+}
+
 async function selectOption(question, optionIndex) {
   state.answers[question.id] = optionIndex;
   renderQuestion();
+  await saveAnswer(question, optionIndex);
+}
 
+/** Autosave, so a dropped connection or a closed tab does not lose answers. */
+async function saveAnswer(question, answer) {
   try {
-    // Autosave, so a dropped connection or closed tab does not lose answers.
-    await api.saveAnswer(state.attemptId, question.id, optionIndex);
+    await api.saveAnswer(state.attemptId, question.id, answer);
   } catch (error) {
     if (error.status === 410) {
       clearInterval(state.ticker);
@@ -301,7 +380,7 @@ function renderOwnReview(result) {
   const list = clear(document.querySelector('#result-review-list'));
 
   for (const question of result.review) {
-    const state = question.chosenIndex === null ? 'blank' : question.isCorrect ? 'correct' : 'wrong';
+    const state = question.givenAnswer === null ? 'blank' : question.isCorrect ? 'correct' : 'wrong';
     const verdict = { correct: 'Correct', wrong: 'Wrong', blank: 'Not answered' }[state];
 
     list.append(
@@ -311,27 +390,59 @@ function renderOwnReview(result) {
           el('span', { text: question.text }),
           el('span', { class: 'review-q__verdict', dataset: { state }, text: verdict }),
         ]),
-        ...question.options.map((option, index) =>
-          el('div', {
-            class: 'review-opt',
-            dataset: {
-              correct: String(index === question.correctIndex),
-              chosen: String(index === question.chosenIndex),
-            },
-            text: [
-              `${OPTION_LABELS[index]}. ${option}`,
-              index === question.correctIndex ? '  (correct answer)' : '',
-              index === question.chosenIndex && index !== question.correctIndex
-                ? '  (your answer)'
-                : '',
-            ].join(''),
-          }),
-        ),
+        ...reviewAnswerRows(question),
       ]),
     );
   }
 
   section.hidden = false;
+}
+
+/** The answer part of one reviewed question, which differs by type. */
+function reviewAnswerRows(question) {
+  if (question.type !== 'short') {
+    return question.options.map((option, index) =>
+      el('div', {
+        class: 'review-opt',
+        dataset: {
+          correct: String(index === question.correctIndex),
+          chosen: String(index === question.chosenIndex),
+        },
+        text: [
+          `${OPTION_LABELS[index]}. ${option}`,
+          index === question.correctIndex ? '  (correct answer)' : '',
+          index === question.chosenIndex && index !== question.correctIndex ? '  (your answer)' : '',
+        ].join(''),
+      }),
+    );
+  }
+
+  const rows = [
+    el('div', {
+      class: 'review-opt',
+      dataset: { correct: String(question.isCorrect), chosen: 'true' },
+      text: `You wrote: ${question.givenAnswer ?? '(nothing)'}`,
+    }),
+  ];
+
+  if (question.isCorrect) return rows;
+
+  rows.push(
+    el('div', {
+      class: 'review-opt',
+      dataset: { correct: 'true', chosen: 'false' },
+      text: `Answer: ${question.correctAnswer}`,
+    }),
+  );
+
+  // Seeing the other spellings that would have passed is what tells a taker
+  // whether they were wrong or just unlucky in how they wrote it.
+  const others = (question.acceptedAnswers ?? []).slice(1);
+  if (others.length > 0) {
+    rows.push(el('div', { class: 'meta', text: `Also accepted: ${others.join(', ')}` }));
+  }
+
+  return rows;
 }
 
 /* ---- Leaving the quiz ---------------------------------------------------- */

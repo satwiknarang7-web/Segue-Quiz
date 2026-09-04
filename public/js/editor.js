@@ -11,6 +11,8 @@ const subheading = document.querySelector('#quiz-subheading');
 const dialog = document.querySelector('#question-dialog');
 const dialogTitle = document.querySelector('#question-dialog-title');
 const optionRows = document.querySelector('#option-rows');
+const answerRows = document.querySelector('#answer-rows');
+const MAX_ACCEPTED_ANSWERS = 12;
 const questionError = document.querySelector('#question-error');
 const settingsError = document.querySelector('#settings-error');
 
@@ -23,8 +25,27 @@ let editingQuestionId = null;
 
 /* ---- Rendering ---------------------------------------------------------- */
 
-function renderQuestion(question, index) {
-  const answers = question.options.map((option, optionIndex) =>
+/** The answer key as the author sees it, which depends on the type. */
+function renderAnswerKey(question) {
+  if (question.type === 'short') {
+    const [first, ...rest] = question.acceptedAnswers ?? [];
+    return [
+      el('li', { class: 'answer answer--correct' }, [
+        el('span', { class: 'answer__marker', text: '✓' }),
+        el('span', { class: 'answer-key', text: first ?? '' }),
+      ]),
+      // The alternatives matter to whoever is checking the key, but they are
+      // the same answer, so they read as one line rather than several rows.
+      rest.length > 0
+        ? el('li', { class: 'answer' }, [
+            el('span', { class: 'answer__marker', text: '' }),
+            el('span', { class: 'answer-key', text: `also: ${rest.join(', ')}` }),
+          ])
+        : null,
+    ].filter(Boolean);
+  }
+
+  return question.options.map((option, optionIndex) =>
     el(
       'li',
       { class: `answer${optionIndex === question.correctIndex ? ' answer--correct' : ''}` },
@@ -34,11 +55,16 @@ function renderQuestion(question, index) {
       ],
     ),
   );
+}
+
+function renderQuestion(question, index) {
+  const answers = renderAnswerKey(question);
 
   return el('article', { class: 'question' }, [
     el('div', { class: 'question__head' }, [
       el('span', { class: 'question__index', text: `Q${index + 1}` }),
       el('span', { class: 'question__text', text: question.text }),
+      question.type === 'short' ? el('span', { class: 'badge', text: 'Typed' }) : null,
       el('span', { class: 'badge', text: `${question.points} pt${question.points === 1 ? '' : 's'}` }),
     ]),
     el('ul', { class: 'answer-list' }, answers),
@@ -218,6 +244,7 @@ document.querySelector('#ai-generate').addEventListener('click', async () => {
       topic,
       count: Number(document.querySelector('#ai-count').value) || 10,
       difficulty: document.querySelector('#ai-difficulty').value,
+      style: document.querySelector('#ai-style').value,
     });
 
     // Straight into the review box, never straight into the quiz.
@@ -280,9 +307,12 @@ async function refreshBulkPreview() {
         el('div', { class: 'bulk-row' }, [
           el('span', { class: 'bulk-row__line', text: `L${question.line}` }),
           el('span', {
-            text: `${question.text}  —  ${question.options.length} options, answer: ${
-              question.options[question.correctIndex]
-            }`,
+            text:
+              question.type === 'short'
+                ? `${question.text}  —  typed, accepts: ${question.acceptedAnswers.join(', ')}`
+                : `${question.text}  —  ${question.options.length} options, answer: ${
+                    question.options[question.correctIndex]
+                  }`,
           }),
         ]),
       );
@@ -362,8 +392,50 @@ function optionRow(value = '', isCorrect = false) {
   return row;
 }
 
+/** One accepted spelling of a typed answer. */
+function answerRow(value = '') {
+  const input = el('input', {
+    type: 'text',
+    maxlength: '200',
+    placeholder: 'An answer that should be marked right',
+    value,
+  });
+
+  const remove = el('button', {
+    class: 'button button--ghost button--small remove-option',
+    type: 'button',
+    text: '✕',
+    'aria-label': 'Remove this accepted answer',
+    onClick: () => {
+      if (answerRows.children.length <= 1) {
+        showError(questionError, 'A typed question needs at least one accepted answer.');
+        return;
+      }
+      row.remove();
+      syncOptionControls();
+    },
+  });
+
+  const row = el('div', { class: 'option-row' }, [input, remove]);
+  return row;
+}
+
+function currentQuestionType() {
+  return document.querySelector('input[name="question-type"]:checked')?.value ?? 'choice';
+}
+
+/** Show the fields the chosen type needs, and only those. */
+function syncQuestionType() {
+  const short = currentQuestionType() === 'short';
+  document.querySelector('#choice-fields').hidden = short;
+  document.querySelector('#short-fields').hidden = !short;
+  hideNotice(questionError);
+  syncOptionControls();
+}
+
 function syncOptionControls() {
   document.querySelector('#add-option').disabled = optionRows.children.length >= MAX_OPTIONS;
+  document.querySelector('#add-answer').disabled = answerRows.children.length >= MAX_ACCEPTED_ANSWERS;
 }
 
 function openQuestionDialog(question = null) {
@@ -374,19 +446,37 @@ function openQuestionDialog(question = null) {
   document.querySelector('#question-text').value = question?.text ?? '';
   document.querySelector('#question-points').value = question?.points ?? 1;
 
+  const type = question?.type === 'short' ? 'short' : 'choice';
+  document.querySelector(`input[name="question-type"][value="${type}"]`).checked = true;
+
   clear(optionRows);
-  const options = question?.options ?? ['', ''];
+  const options = question?.type === 'short' ? ['', ''] : (question?.options ?? ['', '']);
   options.forEach((option, index) =>
     optionRows.append(optionRow(option, index === (question?.correctIndex ?? 0))),
   );
 
-  syncOptionControls();
+  clear(answerRows);
+  const accepted = question?.acceptedAnswers?.length ? question.acceptedAnswers : [''];
+  accepted.forEach((answer) => answerRows.append(answerRow(answer)));
+
+  syncQuestionType();
   dialog.showModal();
   document.querySelector('#question-text').focus();
 }
 
 document.querySelector('#add-question-button').addEventListener('click', () => openQuestionDialog());
 document.querySelector('#cancel-question').addEventListener('click', () => dialog.close());
+
+for (const radio of document.querySelectorAll('input[name="question-type"]')) {
+  radio.addEventListener('change', syncQuestionType);
+}
+
+document.querySelector('#add-answer').addEventListener('click', () => {
+  if (answerRows.children.length >= MAX_ACCEPTED_ANSWERS) return;
+  answerRows.append(answerRow());
+  syncOptionControls();
+  hideNotice(questionError);
+});
 
 document.querySelector('#add-option').addEventListener('click', () => {
   if (optionRows.children.length >= MAX_OPTIONS) return;
@@ -398,25 +488,39 @@ document.querySelector('#add-option').addEventListener('click', () => {
 document.querySelector('#question-form').addEventListener('submit', async (event) => {
   event.preventDefault();
 
-  const rows = [...optionRows.children];
-  const options = rows.map((row) => row.querySelector('input[type="text"]').value.trim());
-  const correctIndex = rows.findIndex((row) => row.querySelector('input[type="radio"]').checked);
-
-  if (options.some((option) => option === '')) {
-    showError(questionError, 'Every option needs text.');
-    return;
-  }
-  if (correctIndex === -1) {
-    showError(questionError, 'Select which option is correct.');
-    return;
-  }
-
+  const type = currentQuestionType();
   const payload = {
+    type,
     text: document.querySelector('#question-text').value,
-    options,
-    correctIndex,
     points: Number(document.querySelector('#question-points').value || 1),
   };
+
+  if (type === 'short') {
+    const accepted = [...answerRows.children]
+      .map((row) => row.querySelector('input[type="text"]').value.trim())
+      .filter((answer) => answer !== '');
+
+    if (accepted.length === 0) {
+      showError(questionError, 'Give at least one answer that should be marked right.');
+      return;
+    }
+    payload.acceptedAnswers = accepted;
+  } else {
+    const rows = [...optionRows.children];
+    const options = rows.map((row) => row.querySelector('input[type="text"]').value.trim());
+    const correctIndex = rows.findIndex((row) => row.querySelector('input[type="radio"]').checked);
+
+    if (options.some((option) => option === '')) {
+      showError(questionError, 'Every option needs text.');
+      return;
+    }
+    if (correctIndex === -1) {
+      showError(questionError, 'Select which option is correct.');
+      return;
+    }
+    payload.options = options;
+    payload.correctIndex = correctIndex;
+  }
 
   const saveButton = document.querySelector('#save-question');
   saveButton.disabled = true;

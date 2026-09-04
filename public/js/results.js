@@ -158,7 +158,7 @@ async function openReview(entry) {
     const container = clear(document.querySelector('#review-questions'));
 
     paper.questions.forEach((question) => {
-      const state = question.chosenIndex === null ? 'blank' : question.isCorrect ? 'correct' : 'wrong';
+      const state = question.givenAnswer === null ? 'blank' : question.isCorrect ? 'correct' : 'wrong';
       const verdict = { correct: 'Correct', wrong: 'Wrong', blank: 'Not answered' }[state];
 
       container.append(
@@ -168,27 +168,7 @@ async function openReview(entry) {
             el('span', { class: 'breakdown__text', text: question.text }),
             el('span', { class: 'review-q__verdict', dataset: { state }, text: verdict }),
           ]),
-          ...question.options.map((option, index) =>
-            el(
-              'div',
-              {
-                class: 'review-opt',
-                dataset: {
-                  correct: String(index === question.correctIndex),
-                  chosen: String(index === question.chosenIndex),
-                },
-              },
-              [
-                el('span', { text: `${OPTION_LABELS[index]}. ${option}` }),
-                index === question.correctIndex
-                  ? el('span', { class: 'review-opt__tag', text: 'correct answer' })
-                  : null,
-                index === question.chosenIndex && index !== question.correctIndex
-                  ? el('span', { class: 'review-opt__tag', text: 'their answer' })
-                  : null,
-              ],
-            ),
-          ),
+          ...reviewAnswerRows(question),
           el('p', {
             class: 'tie-note',
             text: `${question.pointsAwarded} of ${question.points} point${question.points === 1 ? '' : 's'}`,
@@ -279,6 +259,11 @@ function renderBreakdown(breakdown) {
   }
 
   breakdown.forEach((question, index) => {
+    if (question.type === 'short') {
+      container.append(renderTypedBreakdown(question, index));
+      return;
+    }
+
     const maxCount = Math.max(1, ...question.optionCounts);
 
     container.append(
@@ -314,6 +299,97 @@ function renderBreakdown(breakdown) {
       ]),
     );
   });
+}
+
+/** The answer part of one person's reviewed question, which differs by type. */
+function reviewAnswerRows(question) {
+  if (question.type !== 'short') {
+    return question.options.map((option, index) =>
+      el(
+        'div',
+        {
+          class: 'review-opt',
+          dataset: {
+            correct: String(index === question.correctIndex),
+            chosen: String(index === question.chosenIndex),
+          },
+        },
+        [
+          el('span', { text: `${OPTION_LABELS[index]}. ${option}` }),
+          index === question.correctIndex
+            ? el('span', { class: 'review-opt__tag', text: 'correct answer' })
+            : null,
+          index === question.chosenIndex && index !== question.correctIndex
+            ? el('span', { class: 'review-opt__tag', text: 'their answer' })
+            : null,
+        ],
+      ),
+    );
+  }
+
+  return [
+    el(
+      'div',
+      {
+        class: 'review-opt',
+        dataset: { correct: String(question.isCorrect), chosen: 'true' },
+      },
+      [
+        el('span', { text: question.givenAnswer ?? '(nothing written)' }),
+        el('span', { class: 'review-opt__tag', text: 'their answer' }),
+      ],
+    ),
+    el(
+      'div',
+      { class: 'review-opt', dataset: { correct: 'true', chosen: 'false' } },
+      [
+        el('span', { text: (question.acceptedAnswers ?? []).join(' / ') }),
+        el('span', { class: 'review-opt__tag', text: 'accepted' }),
+      ],
+    ),
+  ];
+}
+
+/**
+ * A typed question has no fixed options to chart, so the breakdown shows what
+ * people actually wrote, commonest first. A wrong spelling appearing near the
+ * top is usually the sign that an accepted answer is missing rather than that
+ * a class got it wrong, which is the thing worth noticing here.
+ */
+function renderTypedBreakdown(question, index) {
+  const given = question.givenAnswers ?? [];
+  const maxCount = Math.max(1, ...given.map((entry) => entry.count));
+
+  return el('div', { class: 'breakdown__item' }, [
+    el('div', { class: 'breakdown__head' }, [
+      el('span', { class: 'question__index meta', text: `Q${index + 1}` }),
+      el('span', { class: 'breakdown__text', text: question.text }),
+      el('span', { class: 'badge', text: 'Typed' }),
+      el('span', { class: 'badge', text: `${question.correctRate}% correct` }),
+    ]),
+    ...given.map((entry) =>
+      el('div', { class: `option-bar${entry.isCorrect ? ' option-bar--correct' : ''}` }, [
+        el('span', { class: 'option-bar__label', text: entry.isCorrect ? '✓' : '✕' }),
+        // The written answer takes the place the option letter holds above it,
+        // so both kinds of breakdown read left to right the same way.
+        el('span', { class: 'given-answer', title: entry.text, text: entry.text }),
+        el('div', { class: 'option-bar__track' }, [
+          el('div', {
+            class: 'option-bar__fill',
+            style: `width: ${(entry.count / maxCount) * 100}%`,
+          }),
+        ]),
+        el('span', { class: 'meta numeric', text: `${entry.count}` }),
+      ]),
+    ),
+    given.length === 0
+      ? el('p', { class: 'meta', text: 'Nobody has answered this one yet.' })
+      : null,
+    el('p', {
+      class: 'tie-note',
+      text: `${question.responseCount} answered · accepted: ${(question.acceptedAnswers ?? []).join(', ')}`,
+    }),
+  ]);
 }
 
 async function refresh() {

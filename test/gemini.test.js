@@ -80,7 +80,7 @@ test('the topic, count and difficulty reach the prompt', async () => {
   );
 
   const { input } = calls[0].body;
-  assert.match(input, /7 multiple-choice/);
+  assert.match(input, /Write 7 quiz questions/);
   assert.match(input, /The water cycle/);
   assert.match(input, /easy difficulty/);
   assert.match(input, /avoid trick questions/);
@@ -90,10 +90,10 @@ test('the count is clamped to something sane', async () => {
   const { fetchImpl, calls } = fakeGemini(wrapInSteps(TWO_QUESTIONS));
 
   await generateQuestions({ topic: 'x', count: 500 }, { fetchImpl });
-  assert.match(calls[0].body.input, /25 multiple-choice/);
+  assert.match(calls[0].body.input, /Write 25 quiz questions/);
 
   await generateQuestions({ topic: 'x', count: -3 }, { fetchImpl });
-  assert.match(calls[1].body.input, /1 multiple-choice/);
+  assert.match(calls[1].body.input, /Write 1 quiz questions/);
 });
 
 /* ---- Reading the reply ---- */
@@ -187,4 +187,88 @@ test('drafts survive the round trip through the real importer', async () => {
   assert.equal(questions.length, 2);
   assert.equal(questions[0].options[questions[0].correctIndex], 'Paris');
   assert.equal(questions[1].options[questions[1].correctIndex], '4');
+});
+
+/* ---- Both question types ------------------------------------------------- */
+
+const MIXED = {
+  questions: [
+    { type: 'choice', text: 'Capital of France?', options: ['Berlin', 'Paris'], correctIndex: 1 },
+    { type: 'short', text: 'Symbol for gold?', acceptedAnswers: ['Au', 'aurum'] },
+  ],
+};
+
+test('a drafted typed question keeps its accepted answers', async () => {
+  const { fetchImpl } = fakeGemini(wrapInSteps(MIXED));
+  const questions = await generateQuestions({ topic: 'x' }, { fetchImpl });
+
+  assert.equal(questions.length, 2);
+  assert.deepEqual(questions[1], {
+    type: 'short',
+    text: 'Symbol for gold?',
+    acceptedAnswers: ['Au', 'aurum'],
+  });
+  assert.equal(questions[1].options, undefined, 'a typed question carries no options');
+});
+
+test('a question with no type is read as multiple choice', async () => {
+  // Older drafts and a model that drops the field must still be usable.
+  const { fetchImpl } = fakeGemini(wrapInSteps(TWO_QUESTIONS));
+  const questions = await generateQuestions({ topic: 'x' }, { fetchImpl });
+  assert.ok(questions.every((question) => question.type === 'choice'));
+});
+
+test('the requested style reaches the prompt', async () => {
+  const { fetchImpl, calls } = fakeGemini(wrapInSteps(MIXED));
+
+  await generateQuestions({ topic: 'x', style: 'short' }, { fetchImpl });
+  assert.match(calls[0].body.input, /Every question must be type "short"/);
+
+  await generateQuestions({ topic: 'x', style: 'choice' }, { fetchImpl });
+  assert.match(calls[1].body.input, /Every question must be type "choice"/);
+
+  await generateQuestions({ topic: 'x' }, { fetchImpl });
+  assert.match(calls[2].body.input, /Mix both types/, 'mixed is the default');
+});
+
+test('a typed question with no usable answers is dropped', async () => {
+  const { fetchImpl } = fakeGemini(
+    wrapInSteps({
+      questions: [
+        { type: 'short', text: 'Fine', acceptedAnswers: ['yes'] },
+        { type: 'short', text: 'No answers', acceptedAnswers: [] },
+        { type: 'short', text: 'Blank answers', acceptedAnswers: ['  ', ''] },
+        { type: 'short', acceptedAnswers: ['no text'] },
+      ],
+    }),
+  );
+
+  const questions = await generateQuestions({ topic: 'x' }, { fetchImpl });
+  assert.equal(questions.length, 1);
+  assert.equal(questions[0].text, 'Fine');
+});
+
+test('a choice question pointing outside its own options is dropped', async () => {
+  const { fetchImpl } = fakeGemini(
+    wrapInSteps({
+      questions: [{ type: 'choice', text: 'Bad', options: ['a', 'b'], correctIndex: 7 }],
+    }),
+  );
+
+  await assert.rejects(generateQuestions({ topic: 'x' }, { fetchImpl }), /none were usable/);
+});
+
+test('a mixed draft round-trips through the real importer', async () => {
+  const { parseBulkQuestions } = await import('../src/lib/parseQuestions.js');
+  const { fetchImpl } = fakeGemini(wrapInSteps(MIXED));
+
+  const text = toPasteFormat(await generateQuestions({ topic: 'x' }, { fetchImpl }));
+  const { questions, errors } = parseBulkQuestions(text);
+
+  assert.deepEqual(errors, [], 'a draft must never produce a broken paste');
+  assert.deepEqual(
+    questions.map((question) => question.type),
+    ['choice', 'short'],
+  );
+  assert.deepEqual(questions[1].acceptedAnswers, ['Au', 'aurum']);
 });

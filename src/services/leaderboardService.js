@@ -1,4 +1,11 @@
 import { notFound } from '../lib/errors.js';
+import {
+  hasOptions,
+  isAnswered,
+  isCorrect,
+  normaliseAnswerText,
+  reviewRow,
+} from '../lib/questionTypes.js';
 import { attemptRepository } from '../repositories/attemptRepository.js';
 import { attemptService } from './attemptService.js';
 import { quizService } from './quizService.js';
@@ -88,22 +95,9 @@ export const leaderboardService = {
 
     if (!attempt || attempt.quizId !== quiz.id) throw notFound('That attempt does not exist.');
 
-    const questions = quiz.questions.map((question, index) => {
-      const chosen = attempt.answers[question.id];
-      const answered = chosen !== undefined && chosen !== null;
-
-      return {
-        number: index + 1,
-        questionId: question.id,
-        text: question.text,
-        options: question.options,
-        correctIndex: question.correctIndex,
-        chosenIndex: answered ? chosen : null,
-        isCorrect: answered && chosen === question.correctIndex,
-        points: question.points,
-        pointsAwarded: answered && chosen === question.correctIndex ? question.points : 0,
-      };
-    });
+    const questions = quiz.questions.map((question, index) =>
+      reviewRow(question, index, attempt.answers[question.id]),
+    );
 
     return {
       attemptId: attempt.id,
@@ -125,22 +119,59 @@ export const leaderboardService = {
     const attempts = attemptRepository.listSubmittedByQuiz(quiz.id);
 
     return quiz.questions.map((question) => {
-      const responses = attempts.filter((attempt) => question.id in attempt.answers);
-      const correct = responses.filter(
-        (attempt) => attempt.answers[question.id] === question.correctIndex,
+      const responses = attempts.filter((attempt) =>
+        isAnswered(question, attempt.answers[question.id]),
+      );
+      const correct = responses.filter((attempt) =>
+        isCorrect(question, attempt.answers[question.id]),
       ).length;
 
-      return {
+      const summary = {
         questionId: question.id,
+        type: question.type ?? 'choice',
         text: question.text,
         responseCount: responses.length,
         correctCount: correct,
         correctRate: responses.length ? Math.round((correct / responses.length) * 100) : 0,
-        optionCounts: question.options.map(
-          (_, index) => responses.filter((attempt) => attempt.answers[question.id] === index).length,
-        ),
-        correctIndex: question.correctIndex,
-        options: question.options,
+      };
+
+      if (hasOptions(question)) {
+        return {
+          ...summary,
+          optionCounts: question.options.map(
+            (_, index) =>
+              responses.filter((attempt) => attempt.answers[question.id] === index).length,
+          ),
+          correctIndex: question.correctIndex,
+          options: question.options,
+        };
+      }
+
+      // A typed question has no fixed options to count, so the useful thing is
+      // what people actually wrote. Grouping by the graded form puts "15 N" and
+      // "15n" together; the most common spelling of each is what gets shown.
+      const groups = new Map();
+      for (const attempt of responses) {
+        const given = String(attempt.answers[question.id]);
+        // Group by the form that grading compares, so the spellings that score
+        // the same are counted together rather than listed separately.
+        const key = normaliseAnswerText(given);
+        const group = groups.get(key) ?? { text: given, count: 0 };
+        group.count += 1;
+        groups.set(key, group);
+      }
+
+      return {
+        ...summary,
+        acceptedAnswers: question.acceptedAnswers ?? [],
+        givenAnswers: [...groups.values()]
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10)
+          .map((group) => ({
+            text: group.text,
+            count: group.count,
+            isCorrect: isCorrect(question, group.text),
+          })),
       };
     });
   },

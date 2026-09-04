@@ -2,6 +2,14 @@ import { config } from '../config.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { createId, createJoinCode } from '../lib/ids.js';
 import { asArray, asBoolean, asInteger, asOptionalString, asString } from '../lib/validate.js';
+import {
+  CHOICE,
+  QUESTION_TYPES,
+  SHORT,
+  hasOptions,
+  normaliseAnswerText,
+  typeOf as questionTypeOf,
+} from '../lib/questionTypes.js';
 import { parseBulkQuestions } from '../lib/parseQuestions.js';
 import { optionOrder, questionOrder } from '../lib/shuffle.js';
 import { attemptRepository } from '../repositories/attemptRepository.js';
@@ -18,9 +26,8 @@ function generateQuizId() {
   throw conflict('Could not allocate a unique join code. Please try again.');
 }
 
-function parseQuestionPayload(payload = {}) {
-  const text = asString(payload.text, 'question', { max: limits.questionMaxLength });
-
+/** Multiple choice: a list of options with exactly one of them marked. */
+function parseChoiceQuestion(payload) {
   const rawOptions = asArray(payload.options, 'options', {
     min: limits.minOptions,
     max: limits.maxOptions,
@@ -39,12 +46,49 @@ function parseQuestionPayload(payload = {}) {
     max: options.length - 1,
   });
 
+  return { options, correctIndex };
+}
+
+/**
+ * Short answer: the taker types, and any of the accepted spellings earns the
+ * marks. Duplicates are rejected using the same normalisation that grades, so
+ * a teacher cannot list "15 N" and "15  n" and come away believing they have
+ * covered two cases when they have covered one.
+ */
+function parseShortQuestion(payload) {
+  const rawAnswers = asArray(payload.acceptedAnswers, 'acceptedAnswers', {
+    min: 1,
+    max: limits.maxAcceptedAnswers,
+  });
+  const acceptedAnswers = rawAnswers.map((answer, index) =>
+    asString(answer, `accepted answer ${index + 1}`, { max: limits.shortAnswerMaxLength }),
+  );
+
+  const deduplicated = new Set(acceptedAnswers.map(normaliseAnswerText));
+  if (deduplicated.size !== acceptedAnswers.length) {
+    throw badRequest('Two accepted answers are the same once spacing and case are ignored.');
+  }
+
+  return { acceptedAnswers };
+}
+
+function parseQuestionPayload(payload = {}) {
+  const text = asString(payload.text, 'question', { max: limits.questionMaxLength });
+
+  // Absent means choice, so anything written before types existed still saves.
+  const type = payload.type === undefined || payload.type === null ? CHOICE : payload.type;
+  if (!QUESTION_TYPES.includes(type)) {
+    throw badRequest(`"type" must be one of: ${QUESTION_TYPES.join(', ')}.`);
+  }
+
   const points =
     payload.points === undefined || payload.points === null || payload.points === ''
       ? 1
       : asInteger(payload.points, 'points', { min: limits.minPoints, max: limits.maxPoints });
 
-  return { text, options, correctIndex, points };
+  const specific = type === SHORT ? parseShortQuestion(payload) : parseChoiceQuestion(payload);
+
+  return { text, type, ...specific, points };
 }
 
 function parseQuizSettings(payload = {}, { partial = false } = {}) {
@@ -349,13 +393,23 @@ export const quizService = {
 
         // The participant sees options in their own order; the index they send
         // back is translated to the answer key's order before anything is stored.
+        const base = {
+          id: question.id,
+          type: questionTypeOf(question),
+          text: question.text,
+          points: question.points,
+        };
+
+        // Typed answers have nothing to shuffle and no options to leak.
+        if (!hasOptions(question)) return base;
+
         const options = shuffleOptions
           ? optionOrder(attemptId, question.id, question.options.length).map(
               (optionIndex) => question.options[optionIndex],
             )
           : question.options;
 
-        return { id: question.id, text: question.text, options, points: question.points };
+        return { ...base, options };
       }),
     };
   },

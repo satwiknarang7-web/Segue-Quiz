@@ -58,6 +58,8 @@ export const config = {
     participantNameMaxLength: 60,
     minOptions: 2,
     maxOptions: 6,
+    maxAcceptedAnswers: 12,
+    shortAnswerMaxLength: 200,
     minTimeLimitSeconds: 10,
     maxTimeLimitSeconds: 4 * 60 * 60,
     minPoints: 1,

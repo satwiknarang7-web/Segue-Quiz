@@ -82,6 +82,39 @@
         align-items: center;
       }
 
+      .type-switch {
+        display: flex;
+        gap: 8px;
+      }
+
+      .type-switch label {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border: 1.5px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-size: 0.88rem;
+        background: var(--bg-elevated);
+      }
+
+      .type-switch label:has(input:checked) {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        font-weight: 600;
+      }
+
+      .type-switch input {
+        accent-color: var(--accent);
+      }
+
+      .answer-key {
+        font-family: var(--mono);
+        font-size: 0.82rem;
+      }
+
       .option-row input[type="radio"] {
         width: 18px;
         height: 18px;
@@ -318,11 +351,39 @@
           </div>
 
           <div class="field">
+            <span class="label">How is it answered?</span>
+            <div class="type-switch" role="radiogroup" aria-label="Question type">
+              <label>
+                <input type="radio" name="question-type" value="choice" checked />
+                <span>Pick an option</span>
+              </label>
+              <label>
+                <input type="radio" name="question-type" value="short" />
+                <span>Type an answer</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field" id="choice-fields">
             <span class="label">Answer options <span class="field__hint">(select the correct one)</span></span>
             <div class="stack stack--tight" id="option-rows"></div>
             <button class="button button--ghost button--small" type="button" id="add-option"
                     style="justify-self: start">
               Add option
+            </button>
+          </div>
+
+          <div class="field" id="short-fields" hidden>
+            <span class="label">Accepted answers</span>
+            <span class="field__hint">
+              Marked right if the taker types any one of these. Capitals, extra spaces and
+              curly quotes are ignored, so list real alternatives - "15 N", "15 newtons" -
+              rather than spellings that differ only in those.
+            </span>
+            <div class="stack stack--tight" id="answer-rows"></div>
+            <button class="button button--ghost button--small" type="button" id="add-answer"
+                    style="justify-self: start">
+              Add another accepted answer
             </button>
           </div>
 
@@ -351,6 +412,11 @@
           Excel or Google Sheets already gives the right format.
         </p>
 
+        <p class="meta">
+          Start a line with <strong>=</strong> for a question the taker types the answer to.
+          Everything after it is an answer you will accept.
+        </p>
+
         <details class="ai-panel" id="ai-panel" hidden>
           <summary>Draft them with Gemini instead</summary>
 
@@ -375,6 +441,14 @@
                   <option value="hard">Hard</option>
                 </select>
               </div>
+              <div class="field" style="flex: 1">
+                <label for="ai-style">Answered by</label>
+                <select id="ai-style">
+                  <option value="mixed" selected>A mix</option>
+                  <option value="choice">Picking an option</option>
+                  <option value="short">Typing an answer</option>
+                </select>
+              </div>
             </div>
 
             <p class="notice notice--warning">
@@ -394,7 +468,8 @@
 
         <pre class="bulk-example">Capital of France?	Berlin	*Paris	Madrid	Rome
 Two plus two?	3	*4	5
-Water is wet	*True	False</pre>
+Water is wet	*True	False
+=SI unit of force?	newton	N</pre>
 
         <div class="field">
           <label for="bulk-text">Your questions</label>

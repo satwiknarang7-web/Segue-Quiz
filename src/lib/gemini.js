@@ -17,7 +17,13 @@ const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const MIN_COUNT = 1;
 const MAX_COUNT = 25;
 
-/** The shape the model must return. */
+/**
+ * The shape the model must return.
+ *
+ * Only text and type are required: a choice question carries options and
+ * correctIndex, a typed one carries acceptedAnswers, and asking for all four
+ * every time is what produces empty arrays glued onto the wrong kind.
+ */
 const RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
@@ -26,11 +32,13 @@ const RESPONSE_SCHEMA = {
       items: {
         type: 'object',
         properties: {
+          type: { type: 'string', enum: ['choice', 'short'] },
           text: { type: 'string' },
           options: { type: 'array', items: { type: 'string' } },
           correctIndex: { type: 'integer' },
+          acceptedAnswers: { type: 'array', items: { type: 'string' } },
         },
-        required: ['text', 'options', 'correctIndex'],
+        required: ['type', 'text'],
       },
     },
   },
@@ -39,15 +47,36 @@ const RESPONSE_SCHEMA = {
 
 export const isConfigured = () => Boolean(process.env.GEMINI_API_KEY);
 
-function buildPrompt({ topic, count, difficulty, notes }) {
+const STYLE_INSTRUCTIONS = {
+  choice: ['- Every question must be type "choice".'],
+  short: ['- Every question must be type "short".'],
+  mixed: [
+    '- Mix both types. Use "short" where there is one obvious word, name or',
+    '  number to give, and "choice" where the answer needs options to be fair.',
+  ],
+};
+
+function buildPrompt({ topic, count, difficulty, notes, style }) {
   const lines = [
-    `Write ${count} multiple-choice quiz questions about: ${topic}.`,
+    `Write ${count} quiz questions about: ${topic}.`,
     '',
-    'Rules:',
-    '- Each question has between 3 and 5 options, exactly one of them correct.',
+    'Each question is one of two types.',
+    '',
+    'type "choice" - the taker picks an option:',
+    '- Give 3 to 5 options, exactly one of them correct.',
     '- correctIndex is the zero-based position of the correct option.',
     '- Wrong options must be plausible, not obviously silly.',
     '- Vary which position the correct answer sits in.',
+    '',
+    'type "short" - the taker types the answer:',
+    '- Give acceptedAnswers: every spelling a teacher would mark right.',
+    '- Include abbreviations and unit variants, e.g. ["15 N", "15 newtons"].',
+    '- Ask these only where the answer is a short, unambiguous word, name or',
+    '  number. If a reasonable person could word it several ways, use "choice".',
+    '- Do not give options or correctIndex for these.',
+    '',
+    'Rules for both:',
+    ...(STYLE_INSTRUCTIONS[style] ?? STYLE_INSTRUCTIONS.mixed),
     '- Keep each question to one sentence where possible.',
     '- Do not number the questions, and do not repeat a question.',
     '- Ask only about things that are settled and checkable, not opinion.',
@@ -77,7 +106,7 @@ function extractText(payload) {
 }
 
 export async function generateQuestions(
-  { topic, count = 10, difficulty = '', notes = '' },
+  { topic, count = 10, difficulty = '', notes = '', style = 'mixed' },
   { fetchImpl = fetch, signal } = {},
 ) {
   if (!isConfigured()) {
@@ -97,7 +126,7 @@ export async function generateQuestions(
       },
       body: JSON.stringify({
         model: MODEL,
-        input: buildPrompt({ topic, count: wanted, difficulty, notes }),
+        input: buildPrompt({ topic, count: wanted, difficulty, notes, style }),
         response_format: {
           type: 'text',
           mime_type: 'application/json',
@@ -136,18 +165,37 @@ export async function generateQuestions(
   if (questions.length === 0) throw new Error('Gemini returned no questions. Try a clearer topic.');
 
   // Shape only. Real validation happens where a typed question is validated.
-  return questions
-    .filter(
-      (question) =>
-        typeof question?.text === 'string' &&
-        Array.isArray(question?.options) &&
-        Number.isInteger(question?.correctIndex),
-    )
-    .map((question) => ({
-      text: question.text.trim(),
-      options: question.options.map((option) => String(option).trim()),
-      correctIndex: question.correctIndex,
-    }));
+  const usable = questions.map(readQuestion).filter(Boolean);
+
+  // Returning an empty list here would show a teacher an empty box and no
+  // reason for it, which reads as the feature being broken.
+  if (usable.length === 0) {
+    throw new Error('Gemini returned questions, but none were usable. Try again.');
+  }
+
+  return usable;
+}
+
+/** One drafted question, or null if it is not usable as either type. */
+function readQuestion(question) {
+  if (typeof question?.text !== 'string' || question.text.trim() === '') return null;
+  const text = question.text.trim();
+
+  if (question.type === 'short') {
+    const accepted = (Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [])
+      .map((answer) => String(answer).trim())
+      .filter((answer) => answer !== '');
+
+    return accepted.length > 0 ? { type: 'short', text, acceptedAnswers: accepted } : null;
+  }
+
+  // Anything not explicitly short is judged as a choice question, so a model
+  // that omits the type field still produces something usable.
+  if (!Array.isArray(question.options) || !Number.isInteger(question.correctIndex)) return null;
+  const options = question.options.map((option) => String(option).trim());
+  if (question.correctIndex < 0 || question.correctIndex >= options.length) return null;
+
+  return { type: 'choice', text, options, correctIndex: question.correctIndex };
 }
 
 /**
@@ -156,11 +204,19 @@ export async function generateQuestions(
  */
 export function toPasteFormat(questions) {
   return questions
-    .map(({ text, options, correctIndex }) =>
-      [text, ...options.map((option, index) => (index === correctIndex ? `*${option}` : option))]
-        // Tabs are the separator, so strip any the model produced.
-        .map((cell) => cell.replace(/\t/g, ' '))
-        .join('\t'),
-    )
+    .map((question) => {
+      const cells =
+        question.type === 'short'
+          ? [`=${question.text}`, ...question.acceptedAnswers]
+          : [
+              question.text,
+              ...question.options.map((option, index) =>
+                index === question.correctIndex ? `*${option}` : option,
+              ),
+            ];
+
+      // Tabs are the separator, so strip any the model produced.
+      return cells.map((cell) => cell.replace(/\t/g, ' ')).join('\t');
+    })
     .join('\n');
 }

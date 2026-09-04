@@ -12,10 +12,23 @@
  *
  * Marking the answer inline rather than in a fixed column is what lets one
  * paste mix two-option and six-option questions.
+ *
+ * A question beginning with = is answered by typing instead of choosing, and
+ * every cell after it is a spelling that will be accepted:
+ *
+ *   =SI unit of force?<TAB>newton<TAB>N
+ *
+ * It has to be marked explicitly. Treating "no asterisk anywhere" as a typed
+ * question would quietly turn the commonest paste mistake - forgetting the * -
+ * into a question of the wrong type, instead of the error it currently raises.
  */
+
+import { normaliseAnswerText } from './questionTypes.js';
 
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 6;
+const MAX_ACCEPTED_ANSWERS = 12;
+const SHORT_ANSWER_PREFIX = '=';
 
 /** Split one line, honouring "quoted cells" so a delimiter can appear inside. */
 function splitLine(line, delimiter) {
@@ -72,10 +85,47 @@ export function parseBulkQuestions(input) {
 
   for (const { line, number } of lines) {
     const cells = splitLine(line, delimiter).filter((cell, index) => index === 0 || cell !== '');
-    const [text, ...rawOptions] = cells;
+    const [rawText, ...rawOptions] = cells;
+    const isShort = rawText.startsWith(SHORT_ANSWER_PREFIX);
+    const text = isShort ? rawText.slice(SHORT_ANSWER_PREFIX.length).trim() : rawText;
 
     if (!text) {
       errors.push({ line: number, message: 'No question text.' });
+      continue;
+    }
+
+    if (isShort) {
+      const accepted = rawOptions.map((answer) => answer.trim()).filter((answer) => answer !== '');
+
+      if (accepted.length === 0) {
+        errors.push({ line: number, message: 'A typed question needs at least one answer after it.' });
+        continue;
+      }
+
+      if (accepted.length > MAX_ACCEPTED_ANSWERS) {
+        errors.push({
+          line: number,
+          message: `${accepted.length} accepted answers; at most ${MAX_ACCEPTED_ANSWERS} are allowed.`,
+        });
+        continue;
+      }
+
+      const distinct = new Set(accepted.map(normaliseAnswerText));
+      if (distinct.size !== accepted.length) {
+        errors.push({
+          line: number,
+          message: 'Two accepted answers are the same once spacing and case are ignored.',
+        });
+        continue;
+      }
+
+      questions.push({
+        line: number,
+        type: 'short',
+        text,
+        acceptedAnswers: accepted,
+        points: 1,
+      });
       continue;
     }
 
@@ -121,6 +171,7 @@ export function parseBulkQuestions(input) {
 
     questions.push({
       line: number,
+      type: 'choice',
       text,
       options,
       correctIndex: marked[0],
