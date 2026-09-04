@@ -67,6 +67,14 @@ function renderQuestion(question, index) {
       question.type === 'short' ? el('span', { class: 'badge', text: 'Typed' }) : null,
       el('span', { class: 'badge', text: `${question.points} pt${question.points === 1 ? '' : 's'}` }),
     ]),
+    question.imageUrl
+      ? el('img', {
+          class: 'question__figure',
+          src: question.imageUrl,
+          alt: question.imageAlt || '',
+          loading: 'lazy',
+        })
+      : null,
     el('ul', { class: 'answer-list' }, answers),
     el('div', { class: 'row' }, [
       el('button', {
@@ -420,6 +428,70 @@ function answerRow(value = '') {
   return row;
 }
 
+/* ---- The diagram on a question ---- */
+
+// Held here rather than read back off the preview, so that cancelling the
+// dialog cannot leave a half-attached image behind.
+let questionImageUrl = null;
+
+function renderImagePicker() {
+  const preview = document.querySelector('#image-preview');
+  const alt = document.querySelector('#image-alt');
+  const remove = document.querySelector('#image-remove');
+  const file = document.querySelector('#image-file');
+
+  const attached = Boolean(questionImageUrl);
+  preview.hidden = !attached;
+  alt.hidden = !attached;
+  remove.hidden = !attached;
+  file.hidden = attached;
+  // What may be uploaded stops being useful once something has been.
+  document.querySelector('#image-hint').hidden = attached;
+
+  if (attached) preview.src = questionImageUrl;
+}
+
+function setQuestionImage(url, altText = '') {
+  questionImageUrl = url;
+  document.querySelector('#image-alt').value = altText;
+  document.querySelector('#image-file').value = '';
+  renderImagePicker();
+}
+
+async function uploadQuestionImage(file) {
+  const hint = document.querySelector('#image-hint');
+  hint.textContent = 'Uploading…';
+
+  try {
+    // FileReader gives a data: URL; the server accepts that form directly, so
+    // there is no prefix stripping to get wrong on either side.
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('That file could not be read.'));
+      reader.readAsDataURL(file);
+    });
+
+    const { url } = await api.uploadImage(quizId, dataUrl);
+    setQuestionImage(url, document.querySelector('#image-alt').value);
+    hint.textContent = 'PNG, JPEG, GIF or WebP, up to 3 MB.';
+  } catch (error) {
+    hint.textContent = 'PNG, JPEG, GIF or WebP, up to 3 MB.';
+    document.querySelector('#image-file').value = '';
+    showError(questionError, error.message);
+  }
+}
+
+document.querySelector('#image-file').addEventListener('change', (event) => {
+  const [file] = event.target.files ?? [];
+  if (file) uploadQuestionImage(file);
+});
+
+document.querySelector('#image-remove').addEventListener('click', () => {
+  setQuestionImage(null);
+  hideNotice(questionError);
+});
+
 function currentQuestionType() {
   return document.querySelector('input[name="question-type"]:checked')?.value ?? 'choice';
 }
@@ -459,6 +531,7 @@ function openQuestionDialog(question = null) {
   const accepted = question?.acceptedAnswers?.length ? question.acceptedAnswers : [''];
   accepted.forEach((answer) => answerRows.append(answerRow(answer)));
 
+  setQuestionImage(question?.imageUrl ?? null, question?.imageAlt ?? '');
   syncQuestionType();
   dialog.showModal();
   document.querySelector('#question-text').focus();
@@ -493,6 +566,8 @@ document.querySelector('#question-form').addEventListener('submit', async (event
     type,
     text: document.querySelector('#question-text').value,
     points: Number(document.querySelector('#question-points').value || 1),
+    imageUrl: questionImageUrl ?? '',
+    imageAlt: document.querySelector('#image-alt').value,
   };
 
   if (type === 'short') {

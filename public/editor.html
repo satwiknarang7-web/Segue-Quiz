@@ -115,6 +115,32 @@
         font-size: 0.82rem;
       }
 
+      .image-picker {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      #image-preview {
+        width: 96px;
+        height: 96px;
+        object-fit: contain;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--bg-subtle);
+        flex: none;
+      }
+
+      .question__figure {
+        max-width: 100%;
+        max-height: 140px;
+        object-fit: contain;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--bg-subtle);
+        justify-self: start;
+      }
+
       .option-row input[type="radio"] {
         width: 18px;
         height: 18px;
@@ -348,6 +374,23 @@
             <label for="question-text">Question</label>
             <textarea id="question-text" maxlength="500" required
                       placeholder="What is the SI unit of force?"></textarea>
+          </div>
+
+          <div class="field">
+            <span class="label">Diagram <span class="field__hint">(optional)</span></span>
+            <div class="image-picker" id="image-picker">
+              <img id="image-preview" alt="" hidden />
+              <div class="stack stack--tight" style="flex: 1">
+                <input type="file" id="image-file" accept="image/png,image/jpeg,image/gif,image/webp" />
+                <span class="field__hint" id="image-hint">PNG, JPEG, GIF or WebP, up to 3 MB.</span>
+                <input type="text" id="image-alt" maxlength="200" hidden
+                       placeholder="Describe the diagram for anyone who cannot see it" />
+                <button class="button button--ghost button--small" type="button" id="image-remove"
+                        hidden style="justify-self: start">
+                  Remove diagram
+                </button>
+              </div>
+            </div>
           </div>
 
           <div class="field">

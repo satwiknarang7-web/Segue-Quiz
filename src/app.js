@@ -37,9 +37,11 @@ export async function handleRequest(req, res) {
         return;
       }
 
-      const body = METHODS_WITH_BODY.has(method)
-        ? await readJsonBody(req, config.maxRequestBodyBytes)
-        : {};
+      // An image is far larger than any other body this accepts, so the route
+      // that takes one raises its own cap. Raising it globally would widen
+      // every other endpoint into somewhere megabytes can be posted.
+      const bodyLimit = match.options?.maxBodyBytes ?? config.maxRequestBodyBytes;
+      const body = METHODS_WITH_BODY.has(method) ? await readJsonBody(req, bodyLimit) : {};
 
       const result = await match.handler({
         req,

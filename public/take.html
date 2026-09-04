@@ -136,6 +136,18 @@
       /* Sized and weighted like an option button, so a typed question does not
          feel like a different screen from a chosen one. 16px keeps iOS from
          zooming the viewport when the box takes focus. */
+      /* A diagram is the question, so it gets the room it needs, but never so
+         much that the answers fall below the fold on a phone. */
+      .question-figure {
+        display: block;
+        max-width: 100%;
+        max-height: 42vh;
+        object-fit: contain;
+        margin: 0 auto 4px;
+        border-radius: var(--radius-sm);
+        background: #fff;
+      }
+
       .short-answer {
         width: 100%;
         font: inherit;
@@ -230,6 +242,16 @@
       .review-q__verdict[data-state="wrong"] { background: var(--danger-soft); color: var(--danger); }
       .review-q__verdict[data-state="blank"] { background: var(--bg-subtle); color: var(--text-faint); }
 
+      .review-figure {
+        display: block;
+        max-width: 100%;
+        max-height: 220px;
+        object-fit: contain;
+        border-radius: var(--radius-sm);
+        background: #fff;
+        margin: 4px 0;
+      }
+
       .review-opt {
         font-size: 0.86rem;
         color: var(--text-muted);
@@ -312,6 +334,7 @@
         <div class="card stack">
           <span class="badge badge--accent" id="question-position"></span>
           <p class="question-prompt" id="question-prompt"></p>
+          <img class="question-figure" id="question-figure" alt="" hidden />
           <div class="stack stack--tight" id="option-list"></div>
 
           <div class="row">

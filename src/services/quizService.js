@@ -7,6 +7,7 @@ import {
   QUESTION_TYPES,
   SHORT,
   hasOptions,
+  isOwnMediaUrl,
   normaliseAnswerText,
   typeOf as questionTypeOf,
 } from '../lib/questionTypes.js';
@@ -88,7 +89,31 @@ function parseQuestionPayload(payload = {}) {
 
   const specific = type === SHORT ? parseShortQuestion(payload) : parseChoiceQuestion(payload);
 
-  return { text, type, ...specific, points };
+  return { text, type, ...specific, ...parseQuestionImage(payload), points };
+}
+
+/**
+ * The diagram shown with a question, if there is one.
+ *
+ * Only a URL this application produced is accepted. Anything else would let
+ * whoever writes a quiz have every taker's browser fetch a resource we have
+ * not seen, from a host we do not control.
+ */
+function parseQuestionImage(payload) {
+  const url = payload.imageUrl;
+  if (url === undefined || url === null || url === '') return {};
+
+  if (!isOwnMediaUrl(url, { supabaseUrl: config.supabase.url })) {
+    throw badRequest('That image is not one uploaded to this quiz.');
+  }
+
+  // Describing the picture is what makes the question answerable by someone
+  // using a screen reader, so it is asked for rather than silently optional.
+  const imageAlt = asOptionalString(payload.imageAlt, 'imageAlt', {
+    max: limits.imageAltMaxLength,
+  });
+
+  return { imageUrl: url, imageAlt: imageAlt ?? '' };
 }
 
 function parseQuizSettings(payload = {}, { partial = false } = {}) {
@@ -398,6 +423,9 @@ export const quizService = {
           type: questionTypeOf(question),
           text: question.text,
           points: question.points,
+          ...(question.imageUrl
+            ? { imageUrl: question.imageUrl, imageAlt: question.imageAlt ?? '' }
+            : {}),
         };
 
         // Typed answers have nothing to shuffle and no options to leak.

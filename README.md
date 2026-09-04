@@ -47,6 +47,59 @@ deadline is stored with the attempt. That means:
   answered, and the recorded time is capped at the limit.
 - An attempt abandoned entirely is finalised the next time results are viewed.
 
+### Question types
+
+A question is answered one of two ways, chosen in the editor under **How is it answered?**
+
+**Pick an option** is multiple choice: two to six options with one marked correct.
+
+**Type an answer** gives the taker a text box. You list the answers you will accept, and
+any one of them earns the marks. The comparison ignores capitals and extra spacing, and
+also the substitutions that would otherwise mark a right answer wrong - the curly
+apostrophe a phone keyboard produces, and the en dash or unicode minus a word processor
+puts in front of a negative number. It ignores nothing that tells two answers apart, so
+`3.5` and `35` stay different.
+
+So list real alternatives rather than spellings that differ only in case or spacing:
+
+| Question | Accepted answers |
+| --- | --- |
+| Chemical symbol for gold? | `Au`, `aurum` |
+| Force on a 1.5 kg mass at 10 m/s²? | `15 N`, `15 newtons`, `15` |
+
+Two accepted answers that grade identically are refused when you save, so a list cannot
+suggest a coverage it does not have.
+
+Questions written before this existed are multiple choice, and nothing about them
+changed - there was no migration, because questions live in a `jsonb` column and the
+new fields simply ride along.
+
+### Diagrams
+
+Any question can carry a picture: a circuit, a graph, a map. Attach one under **Diagram**
+in the question editor, in PNG, JPEG, GIF or WebP up to 3 MB. Describe it in the box
+underneath - that description is what someone using a screen reader gets instead of the
+image, and a diagram question is unanswerable without it.
+
+Two things worth knowing:
+
+- **The file is stored on its own, not inside the quiz.** A quiz is loaded whole into
+  memory and sent whole to every taker, so an image inlined into the questions would
+  ride along in each of those payloads. The question keeps only a URL, and the browser
+  fetches and caches the image itself.
+- **Where it is stored depends on your configuration.** With Supabase configured, images
+  go to a public `quiz-media` bucket, created on first upload, and survive a redeploy.
+  Without it they are files under `data/media`, which on a container host is wiped
+  whenever the container restarts - the same caveat as the rest of the JSON storage.
+
+SVG is deliberately not accepted. It is a document that can carry script, and serving one
+from this origin would hand it this site's cookies. The format is checked by reading the
+file's first bytes, so renaming a script to `.png` does not get it in.
+
+A question can only point at an image uploaded through this application. An arbitrary URL
+is refused, because it would let whoever writes a quiz have every taker's browser fetch
+something from a host nobody here controls.
+
 ### Adding many questions at once
 
 **Paste many** in the editor takes a block of text, one question per line: the question
@@ -63,6 +116,18 @@ what copying a range out of Excel or Google Sheets produces, so a spreadsheet of
 questions pastes straight in. Commas work too, with `"quoted cells"` when a question
 contains one. Blank lines and `#` comments are skipped, and trailing empty columns are
 ignored.
+
+Start a line with `=` for a question that is typed rather than chosen. Everything after
+it is an answer you will accept:
+
+```
+=SI unit of force?	newton	N
+=Chemical symbol for gold?	Au	aurum
+```
+
+The marker is explicit on purpose. Treating "no asterisk on the line" as a typed question
+would turn the commonest mistake in a paste - forgetting the `*` - into a question of the
+wrong type, instead of the error it is reported as now.
 
 Marking the answer inline rather than in a fixed column is what lets one paste mix
 two-option and six-option questions.

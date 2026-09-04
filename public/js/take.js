@@ -133,6 +133,7 @@ function renderQuestion() {
 
   document.querySelector('#question-position').textContent = `Question ${state.index + 1} of ${total}`;
   document.querySelector('#question-prompt').textContent = question.text;
+  renderQuestionImage(question);
 
   updateProgress();
 
@@ -179,6 +180,21 @@ function finishQuestionRender(total) {
   submitButton.className = onLastQuestion ? 'button' : 'button button--ghost';
 
   renderNavigator();
+}
+
+/** The diagram a question is asked about, if it has one. */
+function renderQuestionImage(question) {
+  const figure = document.querySelector('#question-figure');
+
+  if (!question.imageUrl) {
+    figure.hidden = true;
+    figure.removeAttribute('src');
+    return;
+  }
+
+  figure.src = question.imageUrl;
+  figure.alt = question.imageAlt || '';
+  figure.hidden = false;
 }
 
 /** Progress and the navigator, without rebuilding the answer area. */
@@ -390,6 +406,14 @@ function renderOwnReview(result) {
           el('span', { text: question.text }),
           el('span', { class: 'review-q__verdict', dataset: { state }, text: verdict }),
         ]),
+        question.imageUrl
+          ? el('img', {
+              class: 'review-figure',
+              src: question.imageUrl,
+              alt: question.imageAlt || '',
+              loading: 'lazy',
+            })
+          : null,
         ...reviewAnswerRows(question),
       ]),
     );

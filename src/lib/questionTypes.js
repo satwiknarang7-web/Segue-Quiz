@@ -95,6 +95,10 @@ export function reviewRow(question, index, answer) {
     questionId: question.id,
     type: typeOf(question),
     text: question.text,
+    // The diagram is part of the question, so a review without it cannot be
+    // read back.
+    imageUrl: question.imageUrl ?? null,
+    imageAlt: question.imageAlt ?? '',
     isCorrect: correct,
     points: question.points,
     pointsAwarded: correct ? question.points : 0,
@@ -113,4 +117,24 @@ export function reviewRow(question, index, answer) {
   }
 
   return row;
+}
+
+/**
+ * Whether `url` is an image this application stored.
+ *
+ * Only our own uploads are allowed on a question. An arbitrary URL would let
+ * whoever writes a quiz embed anything they liked from anywhere - a tracking
+ * pixel, or content that changes after the quiz was reviewed - and it would be
+ * fetched by every taker's browser.
+ */
+export function isOwnMediaUrl(url, { supabaseUrl = '' } = {}) {
+  if (typeof url !== 'string' || url === '') return false;
+
+  // Served by this process, from the disk store.
+  if (/^\/media\/[A-Za-z0-9_-]+\.(png|jpg|gif|webp)$/.test(url)) return true;
+
+  if (supabaseUrl === '') return false;
+
+  const prefix = `${supabaseUrl.replace(/\/+$/, '')}/storage/v1/object/public/quiz-media/`;
+  return url.startsWith(prefix) && !url.slice(prefix.length).includes('/');
 }

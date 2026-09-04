@@ -45,6 +45,8 @@ export const api = {
   deleteAttempt: (quizId, attemptId) =>
     request('DELETE', `/api/quizzes/${quizId}/attempts/${attemptId}`),
 
+  uploadImage: (quizId, data) => request('POST', `/api/quizzes/${quizId}/media`, { data }),
+
   getIntro: (quizId) => request('GET', `/api/quizzes/${quizId}/intro`),
   startAttempt: (quizId, participantName) =>
     request('POST', `/api/quizzes/${quizId}/attempts`, { participantName }),

@@ -1,10 +1,11 @@
-import { buildJoinUrl } from '../config.js';
+import { buildJoinUrl, config } from '../config.js';
 import { generateQuestions, isConfigured, toPasteFormat } from '../lib/gemini.js';
 import { HttpError, badRequest } from '../lib/errors.js';
 import { send, sendNoContent } from '../lib/http.js';
 import { renderQrPng, renderQrSvg } from '../lib/qrcode.js';
 import { Router } from '../lib/router.js';
 import { leaderboardService } from '../services/leaderboardService.js';
+import { mediaStore, storeUploadedImage } from '../store/mediaStore.js';
 import { quizService } from '../services/quizService.js';
 
 export const quizRoutes = new Router();
@@ -58,6 +59,44 @@ quizRoutes.post(
   ({ params, body, user }) => ({ quiz: quizService.addQuestion(params.quizId, body, user.id) }),
   maker,
 );
+
+/**
+ * Upload a diagram for a question.
+ *
+ * The image is stored on its own and the question keeps only a URL, so the
+ * bytes never travel inside the quiz payload that every taker receives.
+ */
+quizRoutes.post(
+  '/api/quizzes/:quizId/media',
+  async ({ params, body, user }) => {
+    // Ownership first: an upload endpoint that stores the file before checking
+    // is a place to dump files through.
+    quizService.requireOwnedQuiz(params.quizId, user.id);
+    return storeUploadedImage(body);
+  },
+  // Base64 costs about a third on top of the file, and the JSON around it a
+  // little more, so the body cap sits above the image cap rather than at it.
+  { ...maker, maxBodyBytes: Math.ceil(config.limits.imageMaxBytes * 1.4) },
+);
+
+/**
+ * Serve an uploaded image. Public, because the quiz it belongs to is.
+ *
+ * Only reachable when images are on this machine's disk; with Supabase
+ * configured the stored URL points straight at Supabase instead.
+ */
+quizRoutes.get('/media/:imageId', async ({ params, res }) => {
+  const file = await mediaStore.get(params.imageId);
+  if (!file) throw new HttpError(404, 'No such image.');
+
+  send(res, 200, file.buffer, {
+    'Content-Type': file.type,
+    // The id is unique per upload and a stored image is never rewritten, so
+    // this can be cached hard.
+    'Cache-Control': 'public, max-age=31536000, immutable',
+    'X-Content-Type-Options': 'nosniff',
+  });
+});
 
 /** Whether the editor should offer question generation at all. */
 quizRoutes.get('/api/ai/status', () => ({ available: isConfigured() }), maker);

@@ -168,6 +168,14 @@ async function openReview(entry) {
             el('span', { class: 'breakdown__text', text: question.text }),
             el('span', { class: 'review-q__verdict', dataset: { state }, text: verdict }),
           ]),
+          question.imageUrl
+            ? el('img', {
+                class: 'review-figure',
+                src: question.imageUrl,
+                alt: question.imageAlt || '',
+                loading: 'lazy',
+              })
+            : null,
           ...reviewAnswerRows(question),
           el('p', {
             class: 'tie-note',
